@@ -1,5 +1,5 @@
 -- Users of the rental tracker
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS  users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     password TEXT,
@@ -7,7 +7,7 @@ CREATE TABLE users (
 );
 
 -- Items listed by users for rental
-CREATE TABLE listed_items (
+CREATE TABLE IF NOT EXISTS  listed_items (
     item_id INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_id INTEGER NOT NULL,
     item_name TEXT NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE listed_items (
 );
 
 -- Rental transactions between users and listed items
-CREATE TABLE rentals (
+CREATE TABLE IF NOT EXISTS  rentals (
     rental_id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL,
     renter_id INTEGER NOT NULL,

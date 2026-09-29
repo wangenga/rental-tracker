@@ -1,5 +1,6 @@
 package com.rentaltracker;
 
+import com.rentaltracker.infrastructure.DataInitializer;
 import com.rentaltracker.infrastructure.Database;
 
 public class Main {
@@ -7,5 +8,7 @@ public class Main {
 
         System.out.println("Hello, Rental Tracker!");
         Database db = new Database();
+        DataInitializer dataInitializer = new DataInitializer();
+        dataInitializer.initialize();
     }
 }
