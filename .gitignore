@@ -1,0 +1,35 @@
+# Build output
+target/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# SQLite: ignore all databases and journals by default...
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+# ...except the seeded database, which is a deliverable
+!data/rental-tracker.db
+
+# Local scratch space
+scratch/
+
+# JaCoCo report: regenerated on every test run.
+docs/coverage/
