@@ -1,14 +1,15 @@
 package com.rentaltracker;
 
-import com.rentaltracker.infrastructure.DataInitializer;
+
 import com.rentaltracker.infrastructure.Database;
 
 public class Main {
     public static void main(String[] args) {
 
-        System.out.println("Hello, Rental Tracker!");
-        Database db = new Database();
-        DataInitializer dataInitializer = new DataInitializer();
-        dataInitializer.initialize();
+        String path = args.length > 0 ? args[0] : "data/local.db";
+
+        try(Database db = new Database(path)){
+            System.out.println("Hello, Rental Tracker!");
+        }
     }
 }
