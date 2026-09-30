@@ -1,16 +1,31 @@
 package com.rentaltracker.infrastructure;
 
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-public class Database {
-    public Database() {
-        var url = "jdbc:sqlite:db/rental_tracker.sqlite?foreign_keys=on";
+import com.rentaltracker.repository.exception.DatabaseConnectionException;
+import com.rentaltracker.repository.exception.RepositoryException;
 
-        try (var conn = DriverManager.getConnection(url)) {
+public class Database implements AutoCloseable {
+    private final Connection connection;
+
+    public Database(String path) {
+        try {
+            connection = DriverManager.getConnection("jdbc:sqlite:" + path +"?foreign_keys=on");
+            DataInitializer.initialize(connection);
             System.out.println("Connection to SQLite has been established.");
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            throw new DatabaseConnectionException("Cannot open database at " + path , e);
         }
     }
+
+    public Connection connection() { return connection; }
+    
+    @Override
+    public void close(){
+        try { connection.close(); }
+        catch (SQLException e) { throw new RepositoryException("Failed to close database", e);}
+    }
+
 }
