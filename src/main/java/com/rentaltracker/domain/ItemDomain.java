@@ -4,7 +4,7 @@ import com.rentaltracker.domain.enums.ItemStatus;
 import java.time.LocalDateTime;
 
 public class ItemDomain{
-    private int id;
+    private int itemId;
     private int ownerId;
     private String itemName;
     private String description;
@@ -15,9 +15,9 @@ public class ItemDomain{
     public ItemDomain (){
 
     }
-    public ItemDomain(int id, int ownerId, String itemName, String description,
+    public ItemDomain(int itemId, int ownerId, String itemName, String description,
                       int costPerDay, ItemStatus status, LocalDateTime createdAt){
-        this.id = id;
+        this.itemId = itemId;
         this.ownerId = ownerId;
         this.itemName = itemName;
         this.description = description;
@@ -26,8 +26,8 @@ public class ItemDomain{
         this.createdAt = createdAt;
     }
 
-    public int getId() {
-        return id;
+    public int getItemId() {
+        return itemId;
     }
 
     public int getOwnerId() {
@@ -54,8 +54,8 @@ public class ItemDomain{
         return createdAt;
     }
 
-    public void setId(int id) {
-        this.id = id;
+    public void setItemId(int itemId) {
+        this.itemId = itemId;
     }
 
     public void setOwnerId(int ownerId) {
