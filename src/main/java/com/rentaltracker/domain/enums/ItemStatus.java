@@ -7,7 +7,7 @@ public enum ItemStatus {
 
     public static ItemStatus safeValueOf(String value){
         try{
-            return ItemStatus.valueOf(value.toUpperCase());
+            return ItemStatus.valueOf(value.toLowerCase());
         } catch (IllegalArgumentException | NullPointerException e){
             return available;
         }

@@ -2,7 +2,6 @@ package com.rentaltracker.repository;
 
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
-import jdk.jfr.Frequency;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -72,7 +71,7 @@ public class ItemRepository {
     }
 
     public void update(ItemDomain item) throws SQLException {
-        String sql = "UPDATE users SET owner_id = ?, item_name = ?, description = ?, cost_per_day = ?, status = ? WHERE item_id = ?";
+        String sql = "UPDATE listed_items SET owner_id = ?, item_name = ?, description = ?, cost_per_day = ?, status = ? WHERE item_id = ?";
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, item.getOwnerId());
@@ -80,13 +79,13 @@ public class ItemRepository {
             statement.setString(3, item.getDescription());
             statement.setInt(4, item.getCostPerDay());
             statement.setString(5, item.getStatus().name());
-
+            statement.setInt(6, item.getItemId());
             statement.executeUpdate();
         }
     }
 
     public void deleteById (int itemId) throws SQLException {
-        String sql = "DELETE FROM listed_items WHERE id = ?";
+        String sql = "DELETE FROM listed_items WHERE item_id = ?";
 
         try(PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, itemId);
