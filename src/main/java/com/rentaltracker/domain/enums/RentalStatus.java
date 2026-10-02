@@ -1,4 +1,4 @@
-package com.rentaltracker.domain.enum;
+package com.rentaltracker.domain.enums;
 
 public enum RentalStatus {
     active,
