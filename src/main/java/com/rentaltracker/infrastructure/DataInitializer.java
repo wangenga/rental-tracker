@@ -39,7 +39,8 @@ public final class DataInitializer {
             try (Statement stmt = conn.createStatement()) {
                 for (String sql : statements) {
                     if (!sql.isBlank()) {
-                        stmt.execute(sql.trim()); // Use execute() for DDL
+                        stmt.execute(sql.trim());// Use execute() for DDL
+                        System.out.println("schema.sql ran");
                     }
                 }
             }

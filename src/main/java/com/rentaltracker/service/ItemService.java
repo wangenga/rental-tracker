@@ -20,6 +20,8 @@ public class ItemService {
 
     //CREATE
 
+    //This first method is invoked when it is called and status is not given as a parameter.
+    //Defaults to available. However, the user can create an item and set the status to something else.
     public ItemDomain createItem(int ownerId, String itemName, String description, int costPerDay) throws SQLException {
         return createItem(ownerId, itemName, description, costPerDay, ItemStatus.available);
     }
