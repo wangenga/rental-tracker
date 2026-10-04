@@ -24,8 +24,9 @@ public class Database implements AutoCloseable {
     
     @Override
     public void close(){
-        try { connection.close(); }
-        catch (SQLException e) { throw new RepositoryException("Failed to close database", e);}
+        try { 
+            connection.close(); 
+        }catch (SQLException e) { throw new RepositoryException("Failed to close database", e);}
     }
 
 }
