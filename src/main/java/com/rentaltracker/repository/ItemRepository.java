@@ -2,6 +2,7 @@ package com.rentaltracker.repository;
 
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
+import com.rentaltracker.infrastructure.DbTime;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -29,7 +30,7 @@ public class ItemRepository {
             statement.setString(3, item.getDescription());
             statement.setInt(4, item.getCostPerDay());
             statement.setString(5, item.getStatus().name());
-            statement.setObject(6, item.getCreatedAt());
+            statement.setString(6, DbTime.format(item.getCreatedAt()));
 
             statement.executeUpdate();
 
@@ -97,7 +98,7 @@ public class ItemRepository {
         String status = resultSet.getString("status");
         ItemStatus itemStatus = ItemStatus.safeValueOf(status);
 
-        LocalDateTime createdAt = resultSet.getObject("created_at", LocalDateTime.class);
+        LocalDateTime createdAt = DbTime.parse(resultSet.getString("created_at"));
 
         return new ItemDomain(
                 resultSet.getInt("item_id"),
