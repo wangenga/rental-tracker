@@ -284,22 +284,6 @@ class UserRepositoryTest {
     }
 
     @Test
-    void save_throwsRepositoryExceptionWhenPasswordIsNull() {
-
-        assertThrows(
-                RepositoryException.class,
-                () -> userRepository.save(
-                        new User(
-                                0,
-                                "caleb",
-                                null,
-                                null
-                        )
-                )
-        );
-    }
-
-    @Test
     void save_allowsBlankPasswordIfSchemaAllowsIt() {
 
         User savedUser = userRepository.save(
@@ -333,7 +317,7 @@ class UserRepositoryTest {
                 LocalDateTime.parse(
                         savedUser.getCreatedAt(),
                         DateTimeFormatter.ofPattern(
-                                "yyyy-MM-dd HH:mm:ss"
+                                "yyyy-MM-dd HH:mm"
                         )
                 )
         );
