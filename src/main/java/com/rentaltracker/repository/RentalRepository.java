@@ -8,12 +8,13 @@ import java.time.format.DateTimeFormatter;
 import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.domain.enums.RentalStatus;
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.infrastructure.DbTime;
 import com.rentaltracker.repository.exception.MappingException;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.repository.exception.SqlExceptionTranslator;
 
 public class RentalRepository {
-     private static final DateTimeFormatter DB_Time = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+     
 
     private final Database db;
 
@@ -29,8 +30,8 @@ public class RentalRepository {
             .prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
                 ps.setLong(1, rental.itemId());
                 ps.setLong(2, rental.renterId());
-                ps.setString(3, rental.startTime().format(DB_Time));
-                ps.setString(4, rental.endTime().format(DB_Time));
+                ps.setString(3, DbTime.format(rental.startTime()));
+                ps.setString(4, DbTime.format(rental.endTime()));
                 ps.executeUpdate();
             
             try (ResultSet keys = ps.getGeneratedKeys()){
@@ -102,7 +103,7 @@ public class RentalRepository {
         String sql = "UPDATE rentals SET status = 'closed', returned_at = ? "
                    + "WHERE rental_id = ? AND status = 'active'";
         try (PreparedStatement ps = db.connection().prepareStatement(sql)){
-            ps.setString(1, returnedAt.format(DB_Time));
+            ps.setString(1, DbTime.format(returnedAt));
             ps.setLong(2, rentalId);
             if (ps.executeUpdate() == 0) {
                 throw new NotFoundException("No active rental with id " + rentalId);
@@ -119,9 +120,9 @@ public class RentalRepository {
                 rs.getLong("rental_id"),
                 rs.getLong("item_id"),
                 rs.getLong("renter_id"),
-                LocalDateTime.parse(rs.getString("start_time"), DB_Time),
-                LocalDateTime.parse(rs.getString("end_time"), DB_Time),
-                returned == null ? null : LocalDateTime.parse(returned, DB_Time),
+                DbTime.parse(rs.getString("start_time")),
+                DbTime.parse(rs.getString("end_time")),
+                returned == null ? null : DbTime.parse(returned),
                 RentalStatus.fromDb(rs.getString("status")));
             
         }catch (SQLException | RuntimeException e) {
