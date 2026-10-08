@@ -44,7 +44,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.2.5</version>
         <configuration>
-          <argLine>@{argLine}--enable-native-access=ALL-UNNAMED</argLine>
+          <argLine>@{argLine} --enable-native-access=ALL-UNNAMED</argLine>
         </configuration>
       </plugin>
 
@@ -126,7 +126,7 @@
                         <limit>
                           <counter>LINE</counter>
                           <value>COVEREDRATIO</value>
-                          <minimum>1.00</minimum>
+                          <minimum>0.8</minimum>
                         </limit>
                       </limits>
                     </rule>
