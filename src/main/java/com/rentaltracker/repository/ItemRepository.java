@@ -2,8 +2,7 @@ package com.rentaltracker.repository;
 
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
-import com.rentaltracker.repository.exception.MappingException;
-import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.infrastructure.DbTime;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -31,7 +30,7 @@ public class ItemRepository {
             statement.setString(3, item.getDescription());
             statement.setInt(4, item.getCostPerDay());
             statement.setString(5, item.getStatus().name());
-            statement.setObject(6, item.getCreatedAt());
+            statement.setString(6, DbTime.format(item.getCreatedAt()));
 
             statement.executeUpdate();
 
@@ -54,11 +53,9 @@ public class ItemRepository {
                 if (resultSet.next()){
                     return Optional.of(mapResultSetToItemDomain(resultSet));
                 }
-                else{
-                    throw new NotFoundException("Listed item not found" + itemId);
-                }
             }
         }
+        return Optional.empty();
     }
 
     public List<ItemDomain> findAll() throws SQLException {
@@ -69,9 +66,6 @@ public class ItemRepository {
         ResultSet resultSet = statement.executeQuery()){
             while (resultSet.next()){
                 listedItems.add(mapResultSetToItemDomain(resultSet));
-            }
-            if (listedItems.isEmpty()){
-                throw new NotFoundException("There are no listed items");
             }
         }
         return listedItems;
@@ -89,7 +83,6 @@ public class ItemRepository {
             statement.setInt(6, item.getItemId());
             statement.executeUpdate();
         }
-
     }
 
     public void deleteById (int itemId) throws SQLException {
@@ -101,25 +94,22 @@ public class ItemRepository {
         }
     }
 
-    private ItemDomain mapResultSetToItemDomain(ResultSet resultSet)  {
-        try {
-            String status = resultSet.getString("status");
-            ItemStatus itemStatus = ItemStatus.safeValueOf(status);
+    private ItemDomain mapResultSetToItemDomain(ResultSet resultSet) throws SQLException {
+        String status = resultSet.getString("status");
+        ItemStatus itemStatus = ItemStatus.safeValueOf(status);
 
-            LocalDateTime createdAt = resultSet.getObject("created_at", LocalDateTime.class);
+        LocalDateTime createdAt = DbTime.parse(resultSet.getString("created_at"));
 
-            return new ItemDomain(
-                    resultSet.getInt("item_id"),
-                    resultSet.getInt("owner_id"),
-                    resultSet.getString("item_name"),
-                    resultSet.getString("description"),
-                    resultSet.getInt("cost_per_day"),
-                    itemStatus,
-                    createdAt
-            );
-        }catch (SQLException | RuntimeException e){
-            throw new MappingException("Cannot map results to Item domain" , e);
-        }
+        return new ItemDomain(
+                resultSet.getInt("item_id"),
+                resultSet.getInt("owner_id"),
+                resultSet.getString("item_name"),
+                resultSet.getString("description"),
+                resultSet.getInt("cost_per_day"),
+                itemStatus,
+                createdAt
+        );
     }
+
 
 }
