@@ -89,6 +89,7 @@ public class ItemRepository {
             statement.setInt(6, item.getItemId());
             statement.executeUpdate();
         }
+
     }
 
     public void deleteById (int itemId) throws SQLException {
