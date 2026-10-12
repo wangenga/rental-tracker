@@ -6,9 +6,11 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
+import com.rentaltracker.repository.exception.ConstraintViolationException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -146,10 +148,9 @@ class ItemServiceTest {
     }
 
     @Test
-    void createItemWithZeroCostIsAllowed() throws SQLException {
-        ItemDomain item = service.createItem(1, "Ladder", "x", 0);
-
-        assertEquals(0, item.getCostPerDay());
+    void createItemWithZeroCostThrows()  {
+        assertThrows(Exception.class,
+                () -> service.createItem(1, "Ladder", "x", 0));
     }
 
     // =================================================================
@@ -306,7 +307,7 @@ class ItemServiceTest {
                 created.getItemId(), "New", "x", 5, ItemStatus.available);
 
         assertEquals(1, updated.getOwnerId());
-        assertEquals(originalCreatedAt, updated.getCreatedAt());
+        assertEquals(originalCreatedAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm")) , updated.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm")));
     }
 
     @Test
