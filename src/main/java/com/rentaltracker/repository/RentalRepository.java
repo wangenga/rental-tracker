@@ -3,7 +3,6 @@ package com.rentaltracker.repository;
 import java.sql.*;
 import java.util.*;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.domain.enums.RentalStatus;
