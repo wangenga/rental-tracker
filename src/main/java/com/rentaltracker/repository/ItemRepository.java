@@ -95,8 +95,7 @@ public class ItemRepository {
     }
 
     private ItemDomain mapResultSetToItemDomain(ResultSet resultSet) throws SQLException {
-        String status = resultSet.getString("status");
-        ItemStatus itemStatus = ItemStatus.safeValueOf(status);
+        ItemStatus itemStatus = ItemStatus.fromDb(resultSet.getString("status"));
 
         LocalDateTime createdAt = DbTime.parse(resultSet.getString("created_at"));
 
