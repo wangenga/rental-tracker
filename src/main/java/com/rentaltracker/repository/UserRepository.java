@@ -2,14 +2,17 @@ package com.rentaltracker.repository;
 
 import com.rentaltracker.domain.User;
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.exception.MappingException;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.repository.exception.RepositoryException;
+import com.rentaltracker.repository.exception.SqlExceptionTranslator;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Handles persistence operations for users.
@@ -57,10 +60,8 @@ public class UserRepository {
             }
 
         } catch (SQLException e) {
-            throw new RepositoryException(
-                    "Failed to find user with id " + id,
-                    e
-            );
+            throw SqlExceptionTranslator.translate(
+                    "Failed to find user with id " + id, e);
         }
     }
 
@@ -96,10 +97,7 @@ public class UserRepository {
             }
 
         } catch (SQLException e) {
-            throw new RepositoryException(
-                    "Failed to find user with username '" + username + "'",
-                    e
-            );
+            throw SqlExceptionTranslator.translate("Failed to find user with username " + username, e);
         }
     }
 
@@ -130,10 +128,7 @@ public class UserRepository {
             return users;
 
         } catch (SQLException e) {
-            throw new RepositoryException(
-                    "Failed to retrieve users",
-                    e
-            );
+            throw SqlExceptionTranslator.translate("Failed to retrieve users", e);
         }
     }
 
@@ -173,22 +168,33 @@ public class UserRepository {
             }
 
         } catch (SQLException e) {
-            throw new RepositoryException(
-                    "Failed to save user '" + user.getUsername() + "'",
-                    e
-            );
+            throw SqlExceptionTranslator.translate("Failed to save user " + user.getUsername(), e);
         }
     }
 
     /**
      * Maps the current database row to a User domain object.
      */
-    private User mapRow(ResultSet resultSet) throws SQLException {
-        return new User(
-                resultSet.getLong("id"),
-                resultSet.getString("username"),
-                resultSet.getString("password"),
-                resultSet.getString("created_at")
-        );
+    private User mapRow(ResultSet resultSet) {
+        try {
+            return new User(
+                    resultSet.getLong("id"),
+                    resultSet.getString("username"),
+                    resultSet.getString("password"),
+                    resultSet.getString("created_at"));
+        } catch (SQLException e) {
+            throw new MappingException("Cannot map user row", e);
+        }
+    }
+
+    /** The lowest-id user. By convention this is the owner. */
+    public Optional<User> findFirst() {
+        String sql = "SELECT id, username, password, created_at FROM users ORDER BY id LIMIT 1";
+        try (PreparedStatement statement = database.connection().prepareStatement(sql);
+            ResultSet resultSet = statement.executeQuery()) {
+            return resultSet.next() ? Optional.of(mapRow(resultSet)) : Optional.empty();
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("find first user", e);
+        }
     }
 }
