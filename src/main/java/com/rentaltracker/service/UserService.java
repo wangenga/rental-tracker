@@ -3,8 +3,10 @@ package com.rentaltracker.service;
 import com.rentaltracker.domain.User;
 import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.service.exception.BusinessRuleException;
 
 import java.util.List;
+import java.util.Optional;
 
 public class UserService {
 
@@ -17,33 +19,21 @@ public class UserService {
         this.userRepository = userRepository;
     }
 
-    public User createUser(String username, String password) {
-
-        String normalizedUsername = normalizeUsername(username);
-
-        validateUsername(normalizedUsername);
-        validatePassword(password);
-
-        try {
-            userRepository.findByUsername(normalizedUsername);
-
-            throw new IllegalArgumentException(
-                    "Username already exists: " + normalizedUsername
-            );
-
-        } catch (NotFoundException exception) {
-            // Username does not exist, so creation can continue.
-        }
-
-        User user = new User(
-                0,
-                normalizedUsername,
-                password,
-                null
-        );
-
-        return userRepository.save(user);
+    /** Empty means first launch. */
+    public Optional<User> findOwner() {
+        return userRepository.findFirst();
     }
+
+    /** Creates the owner account. Only allowed while no users exist. */
+    public User createOwner(String username) {
+        if (userRepository.findFirst().isPresent()) {
+            throw new BusinessRuleException("An owner account already exists");
+        }
+        String normalized = normalizeUsername(username);
+        validateUsername(normalized);
+        return userRepository.save(new User(0, normalized, null, null));
+    }
+
 
     public User getUser(long id) {
 
@@ -104,6 +94,7 @@ public class UserService {
             );
         }
 
+      
         if (!username.matches("[a-z0-9_]+")) {
             throw new IllegalArgumentException(
                     "Username may only contain lowercase letters, "
@@ -111,13 +102,5 @@ public class UserService {
             );
         }
     }
-
-    private void validatePassword(String password) {
-
-        if (password == null || password.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Password cannot be empty"
-            );
-        }
-    }
+    
 }
