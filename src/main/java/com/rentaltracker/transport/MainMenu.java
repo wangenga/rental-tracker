@@ -3,11 +3,9 @@ package com.rentaltracker.transport;
 import com.rentaltracker.repository.exception.RepositoryException;
 import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.exception.InputClosedException;
-import com.rentaltracker.transport.screens.ConfirmReturnScreen;
-import com.rentaltracker.transport.screens.InventoryScreen;
-import com.rentaltracker.transport.screens.ListItemScreen;
+
 import com.rentaltracker.transport.screens.RecordRentalScreen;
-import com.rentaltracker.transport.screens.StartupScreen;
+
 
 public class MainMenu {
 
@@ -25,7 +23,7 @@ public class MainMenu {
     /** Runs until the user exits or the input ends. Never throws for expected failures. */
     public void run() {
         try {
-            int ownerId = (int) startup.run().getId();
+            //int ownerId = (int) startup.run().getId();
             while (true) {
                 showMenu();
                 int choice = prompter.askChoice("> ", 1, EXIT);
@@ -33,7 +31,7 @@ public class MainMenu {
                     prompter.println("Goodbye.");
                     return;
                 }
-                runScreen(choice, ownerId);
+                runScreen(choice);
             }
         } catch (InputClosedException e) {
             prompter.println();
@@ -54,12 +52,12 @@ public class MainMenu {
     }
 
     /** One failing screen reports the problem and returns to the menu. */
-    private void runScreen(int choice, int ownerId) {
+    private void runScreen(int choice /**int ownerId*/) {
         try {
             switch (choice) {
                 //case 1 -> 
                 //case 2 -> 
-                case 3 -> recordRental.run(ownerId);
+                case 3 -> recordRental.run(1);
                 //default -> 
             }
         } catch (IllegalArgumentException | BusinessRuleException e) {
