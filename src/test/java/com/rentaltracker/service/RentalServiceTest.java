@@ -27,6 +27,7 @@ import com.rentaltracker.domain.enums.RentalStatus;
 import com.rentaltracker.infrastructure.Database;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
+import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.repository.SqliteTransactor;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.repository.exception.RepositoryException;
@@ -46,13 +47,15 @@ class RentalServiceTest {
     ItemRepository items;
     RentalRepository rentals;
     RentalService service;
+    UserService users;
 
     @BeforeEach
     void setUp() throws SQLException {
         db = new Database(tempDir.resolve("test.db").toString());
         items = new ItemRepository(db.connection());
         rentals = new RentalRepository(db);
-        service = new RentalService(items, rentals, new SqliteTransactor(db), CLOCK);
+        users = new UserService(new UserRepository(db));
+        service = new RentalService(items, rentals, users, new SqliteTransactor(db), CLOCK);
 
         // user 1 = owner, 2 = renter, 3 = second owner
         exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");
@@ -73,6 +76,10 @@ class RentalServiceTest {
             rs.next();
             return rs.getString(1);
         }
+    }
+
+    private long userCount() throws SQLException {
+        return Long.parseLong(query("SELECT COUNT(*) FROM users"));
     }
 
     private String itemStatus(long itemId) throws SQLException {
@@ -269,4 +276,95 @@ class RentalServiceTest {
     void getActiveRentalsIsEmptyWhenNothingIsOut() {
         assertTrue(service.getActiveRentals(1).isEmpty());
     }
+
+        // ---------- recordRental: success and renter handling ----------
+
+        @Test
+        void recordRentalMarksTheItemRentedAndCreatesOneActiveRental() throws SQLException {
+            long itemId = addItem(1, "Ladder", ItemStatus.available);
+    
+            RentalDomain rental = service.recordRental((int) itemId, "meelis", 3);
+    
+            assertEquals("rented", itemStatus(itemId));
+            assertEquals("1", rentalCount());
+            assertEquals("active", rentalStatus(rental.id()));
+            assertEquals(itemId, rental.itemId());
+            assertEquals(RentalStatus.ACTIVE, rental.status());
+        }
+    
+        @Test
+        void recordRentalSetsTheEndTimeToStartPlusTheDaysEntered() throws SQLException {
+            long itemId = addItem(1, "Ladder", ItemStatus.available);
+    
+            RentalDomain rental = service.recordRental((int) itemId, "meelis", 3);
+    
+            // the fixed clock reads 14:30:45, which is stored truncated to the minute
+            assertEquals(NOW, rental.startTime());
+            assertEquals(NOW.plusDays(3), rental.endTime());
+            assertEquals("2026-06-16 14:30",
+                    query("SELECT start_time FROM rentals WHERE rental_id = " + rental.id()));
+            assertEquals("2026-06-19 14:30",
+                    query("SELECT end_time FROM rentals WHERE rental_id = " + rental.id()));
+        }
+    
+        @Test
+        void recordRentalReusesAnExistingRenterInsteadOfCreatingAnother() throws SQLException {
+            long itemId = addItem(1, "Ladder", ItemStatus.available);
+            assertEquals(3, userCount());
+    
+            RentalDomain rental = service.recordRental((int) itemId, "meelis", 3);
+    
+            assertEquals(3, userCount());
+            assertEquals(2, rental.renterId());   // meelis is user 2
+        }
+    
+        @Test
+        void recordRentalTreatsDifferentCapitalisationAsTheSameRenter() throws SQLException {
+            long itemId = addItem(1, "Ladder", ItemStatus.available);
+    
+            RentalDomain rental = service.recordRental((int) itemId, "  Meelis ", 3);
+    
+            assertEquals(3, userCount());
+            assertEquals(2, rental.renterId());
+        }
+    
+        @Test
+        void recordRentalCreatesAnUnknownRenterWithANormalisedUsername() throws SQLException {
+            long itemId = addItem(1, "Ladder", ItemStatus.available);
+    
+            RentalDomain rental = service.recordRental((int) itemId, "Newrenter", 2);
+    
+            assertEquals(4, userCount());
+            assertEquals("newrenter",
+                    query("SELECT username FROM users WHERE id = " + rental.renterId()));
+            assertNull(query("SELECT password FROM users WHERE id = " + rental.renterId()));
+        }
+    
+        @Test
+        void recordRentalRejectsAnInvalidRenterNameAndChangesNothing() throws SQLException {
+            long itemId = addItem(1, "Ladder", ItemStatus.available);
+    
+            // too short and not allowed characters, both fail UserService validation
+            assertThrows(IllegalArgumentException.class, () -> service.recordRental((int) itemId, "jo", 3));
+            assertThrows(IllegalArgumentException.class, () -> service.recordRental((int) itemId, "bad name!", 3));
+    
+            assertEquals(3, userCount());
+            assertEquals("0", rentalCount());
+            assertEquals("available", itemStatus(itemId));
+        }
+    
+        @Test
+        void recordRentalLeavesNoTraceWhenTheItemUpdateFailsAfterTheRentalIsInserted() throws SQLException {
+            long itemId = addItem(1, "Ladder", ItemStatus.available);
+            // the renter is created and the rental inserted first, then this makes the item update fail
+            exec("CREATE TRIGGER block_item_updates BEFORE UPDATE ON listed_items "
+               + "BEGIN SELECT RAISE(ABORT, 'blocked'); END");
+    
+            assertThrows(RepositoryException.class,
+                    () -> service.recordRental((int) itemId, "brandnewrenter", 3));
+    
+            assertEquals("0", rentalCount());          // the rental insert was undone
+            assertEquals(3, userCount());            // so was the new renter
+            assertEquals("available", itemStatus(itemId));
+        }
 }

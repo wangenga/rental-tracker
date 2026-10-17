@@ -8,13 +8,11 @@ import java.util.List;
 
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.RentalDomain;
-// TODO(users): import com.rentaltracker.domain.UserDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.domain.enums.RentalStatus;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.Transactor;
-// TODO(users): import com.rentaltracker.repository.UserRepository;
 import com.rentaltracker.repository.exception.NotFoundException;
 import com.rentaltracker.repository.exception.SqlExceptionTranslator;
 import com.rentaltracker.service.exception.BusinessRuleException;
@@ -26,16 +24,15 @@ public class RentalService {
 
     private final ItemRepository items;
     private final RentalRepository rentals;
-    // TODO(users): private final UserRepository users;
+    private final UserService users;
     private final Transactor tx;
     private final Clock clock;
 
-    // TODO(users): add UserRepository users back as the third parameter
-    public RentalService(ItemRepository items, RentalRepository rentals,
+    public RentalService(ItemRepository items, RentalRepository rentals, UserService users,
                          Transactor tx, Clock clock) {
         this.items = items;
         this.rentals = rentals;
-        // TODO(users): this.users = users;
+        this.users = users;
         this.tx = tx;
         this.clock = clock;
     }
@@ -115,17 +112,8 @@ public class RentalService {
 
     // ---------- helpers ----------
 
-    // TODO(users): replace this stub with the real lookup once UserRepository exists:
-    //
-    // private long findOrCreateRenterId(String username) {
-    //     Optional<UserDomain> existing = users.findByUsername(username);
-    //     if (existing.isPresent()) {
-    //         return existing.get().getId();
-    //     }
-    //     return users.insert(username, null).getId();
-    // }
     private long findOrCreateRenterId(String username) {
-        throw new UnsupportedOperationException("TODO(users): waiting for UserRepository");
+        return users.findOrCreate(username).getId();
     }
 
     /** Minute precision, because the database stores yyyy-MM-dd HH:mm. */

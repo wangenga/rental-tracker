@@ -1,351 +1,218 @@
 package com.rentaltracker.service;
 
-import com.rentaltracker.domain.User;
-import com.rentaltracker.repository.UserRepository;
-import com.rentaltracker.repository.exception.NotFoundException;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
+import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import com.rentaltracker.domain.User;
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.UserRepository;
+import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.service.exception.BusinessRuleException;
 
 class UserServiceTest {
 
-    private UserRepository userRepository;
-    private UserService userService;
+    @TempDir Path tempDir;
+    String dbPath;
+    Database db;
+    UserService service;
 
     @BeforeEach
     void setUp() {
-        userRepository = mock(UserRepository.class);
-        userService = new UserService(userRepository);
+        dbPath = tempDir.resolve("test.db").toString();
+        db = new Database(dbPath);
+        service = new UserService(new UserRepository(db));
+    }
+
+    @AfterEach
+    void tearDown() { db.close(); }
+
+    // ---------- helpers that talk to the database directly ----------
+
+    private void exec(String sql) throws SQLException {
+        try (Statement st = db.connection().createStatement()) { st.execute(sql); }
+    }
+
+    private String query(Database database, String sql) throws SQLException {
+        try (Statement st = database.connection().createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            rs.next();
+            return rs.getString(1);
+        }
+    }
+
+    private String userCount() throws SQLException {
+        return query(db, "SELECT count(*) FROM users");
+    }
+
+    // ---------- the owner (first launch) ----------
+
+    @Test
+    void firstLaunchHasNoOwner() {
+        assertTrue(service.findOwner().isEmpty());
     }
 
     @Test
-    void createUser_shouldNormalizeUsernameBeforeSaving() {
-        User savedUser = new User(
-                1,
-                "caleb",
-                "password123",
-                "2026-10-06T14:00:00"
-        );
+    void createOwnerStoresANormalisedUserWithNoPassword() throws SQLException {
+        User owner = service.createOwner("  Liisa ");
 
-        when(userRepository.findByUsername("caleb"))
-                .thenThrow(new NotFoundException("User not found"));
-
-        when(userRepository.save(any(User.class)))
-                .thenReturn(savedUser);
-
-        User result = userService.createUser(
-                "  CALEB  ",
-                "password123"
-        );
-
-        assertEquals("caleb", result.getUsername());
-
-        verify(userRepository).findByUsername("caleb");
-        verify(userRepository).save(any(User.class));
+        assertEquals("liisa", owner.getUsername());
+        assertEquals("1", userCount());
+        assertNull(query(db, "SELECT password FROM users WHERE id = " + owner.getId()));
     }
 
     @Test
-    void createUser_shouldRejectNullUsername() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.createUser(null, "password123")
-        );
+    void aSecondRunLoadsTheSameAccountInsteadOfCreatingANewOne() throws SQLException {
+        User created = service.createOwner("liisa");
+        db.close();   // the app exits
 
-        assertEquals(
-                "Username cannot be null",
-                exception.getMessage()
-        );
+        try (Database again = new Database(dbPath)) {   // the app starts again
+            UserService secondRun = new UserService(new UserRepository(again));
 
-        verifyNoInteractions(userRepository);
+            User loaded = secondRun.findOwner().orElseThrow();
+
+            assertEquals(created.getId(), loaded.getId());
+            assertEquals("1", query(again, "SELECT count(*) FROM users"));
+        }
     }
 
     @Test
-    void createUser_shouldRejectEmptyUsername() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.createUser("", "password123")
-        );
+    void createOwnerIsRefusedOnceAnyUserExists() throws SQLException {
+        service.createOwner("liisa");
 
-        assertEquals(
-                "Username cannot be empty",
-                exception.getMessage()
-        );
+        assertThrows(BusinessRuleException.class, () -> service.createOwner("meelis"));
 
-        verifyNoInteractions(userRepository);
+        assertEquals("1", userCount());
     }
 
     @Test
-    void createUser_shouldRejectUsernameShorterThanThreeCharacters() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.createUser("ab", "password123")
-        );
+    void createOwnerRejectsAnInvalidNameAndStoresNothing() throws SQLException {
+        assertThrows(IllegalArgumentException.class, () -> service.createOwner("ab"));
 
-        assertEquals(
-                "Username must be at least 3 characters",
-                exception.getMessage()
-        );
-
-        verifyNoInteractions(userRepository);
+        assertEquals("0", userCount());
     }
 
     @Test
-    void createUser_shouldRejectUsernameLongerThanFiftyCharacters() {
-        String username = "a".repeat(51);
+    void theOwnerIsTheLowestIdUser() throws SQLException {
+        exec("INSERT INTO users (id, username) VALUES (5, 'zed'), (2, 'amy')");
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.createUser(username, "password123")
-        );
+        assertEquals("amy", service.findOwner().orElseThrow().getUsername());
+    }
 
-        assertEquals(
-                "Username must not exceed 50 characters",
-                exception.getMessage()
-        );
+    // ---------- createUser ----------
 
-        verifyNoInteractions(userRepository);
+    @Test
+    void createUserStoresANormalisedUserWithNoPassword() throws SQLException {
+        User user = service.createUser("  Meelis ");
+
+        assertEquals("meelis", user.getUsername());
+        assertNull(query(db, "SELECT password FROM users WHERE id = " + user.getId()));
+        assertEquals("1", userCount());
     }
 
     @Test
-    void createUser_shouldAcceptUsernameWithLettersNumbersAndUnderscores() {
-        User savedUser = new User(
-                1,
-                "caleb_123",
-                "password123",
-                "2026-10-06T14:00:00"
-        );
+    void createUserRejectsATakenUsernameEvenWithDifferentCapitalisation() throws SQLException {
+        service.createUser("meelis");
 
-        when(userRepository.findByUsername("caleb_123"))
-                .thenThrow(new NotFoundException("User not found"));
+        assertThrows(IllegalArgumentException.class, () -> service.createUser("MEELIS"));
 
-        when(userRepository.save(any(User.class)))
-                .thenReturn(savedUser);
+        assertEquals("1", userCount());
+    }
 
-        User result = userService.createUser(
-                "caleb_123",
-                "password123"
-        );
+    // ---------- findOrCreate ----------
 
-        assertEquals("caleb_123", result.getUsername());
+    @Test
+    void findOrCreateCreatesAnUnknownUser() throws SQLException {
+        User user = service.findOrCreate("newrenter");
 
-        verify(userRepository).save(any(User.class));
+        assertEquals("newrenter", user.getUsername());
+        assertEquals("1", userCount());
     }
 
     @Test
-    void createUser_shouldRejectUsernameContainingInvalidCharacters() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.createUser(
-                        "caleb-munyoki",
-                        "password123"
-                )
-        );
+    void findOrCreateReusesAnExistingUserIgnoringCaseAndSpaces() throws SQLException {
+        User first = service.createUser("meelis");
 
-        assertEquals(
-                "Username may only contain lowercase letters, numbers, and underscores",
-                exception.getMessage()
-        );
+        User again = service.findOrCreate("  Meelis ");
 
-        verifyNoInteractions(userRepository);
+        assertEquals(first.getId(), again.getId());
+        assertEquals("1", userCount());
+    }
+
+    // ---------- reads ----------
+
+    @Test
+    void getUserReturnsTheStoredUser() {
+        User created = service.createUser("meelis");
+
+        assertEquals("meelis", service.getUser(created.getId()).getUsername());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, -1})
+    void getUserRejectsANonPositiveId(long id) {
+        assertThrows(IllegalArgumentException.class, () -> service.getUser(id));
     }
 
     @Test
-    void createUser_shouldRejectDuplicateUsername() {
-        User existingUser = new User(
-                1,
-                "caleb",
-                "password123",
-                "2026-10-06T14:00:00"
-        );
-
-        when(userRepository.findByUsername("caleb"))
-                .thenReturn(existingUser);
-
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.createUser(
-                        "caleb",
-                        "newpassword"
-                )
-        );
-
-        assertEquals(
-                "Username already exists: caleb",
-                exception.getMessage()
-        );
-
-        verify(userRepository).findByUsername("caleb");
-        verify(userRepository, never()).save(any(User.class));
+    void getUserOnAMissingIdThrowsNotFound() {
+        assertThrows(NotFoundException.class, () -> service.getUser(999));
     }
 
     @Test
-    void createUser_shouldRejectNullPassword() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.createUser(
-                        "caleb",
-                        null
-                )
-        );
+    void getUserByUsernameFindsAUserFromAnyCapitalisation() {
+        User created = service.createUser("meelis");
 
-        assertEquals(
-                "Password cannot be empty",
-                exception.getMessage()
-        );
-
-        verifyNoInteractions(userRepository);
+        assertEquals(created.getId(), service.getUserByUsername(" MEELIS ").getId());
     }
 
     @Test
-    void createUser_shouldRejectBlankPassword() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.createUser(
-                        "caleb",
-                        "   "
-                )
-        );
-
-        assertEquals(
-                "Password cannot be empty",
-                exception.getMessage()
-        );
-
-        verifyNoInteractions(userRepository);
+    void getUserByUsernameOnAnUnknownNameThrowsNotFound() {
+        assertThrows(NotFoundException.class, () -> service.getUserByUsername("nobody"));
     }
 
     @Test
-    void createUser_shouldSaveAndReturnUserWhenInputIsValid() {
-        User savedUser = new User(
-                5,
-                "caleb",
-                "password123",
-                "2026-10-06T14:00:00"
-        );
+    void getAllUsersReturnsThemInIdOrder() throws SQLException {
+        exec("INSERT INTO users (id, username) VALUES (5, 'zed'), (2, 'amy')");
 
-        when(userRepository.findByUsername("caleb"))
-                .thenThrow(new NotFoundException("User not found"));
+        List<String> names = service.getAllUsers().stream().map(User::getUsername).toList();
 
-        when(userRepository.save(any(User.class)))
-                .thenReturn(savedUser);
+        assertEquals(List.of("amy", "zed"), names);
+    }
 
-        User result = userService.createUser(
-                "caleb",
-                "password123"
-        );
+    // ---------- username validation ----------
 
-        assertNotNull(result);
-        assertEquals(5, result.getId());
-        assertEquals("caleb", result.getUsername());
-        assertEquals("password123", result.getPassword());
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   ", "ab", "bad name", "bad-name", "a!b"})
+    void invalidUsernamesAreRejectedAndNothingIsStored(String name) throws SQLException {
+        assertThrows(IllegalArgumentException.class, () -> service.createUser(name));
 
-        verify(userRepository).findByUsername("caleb");
-        verify(userRepository).save(any(User.class));
+        assertEquals("0", userCount());
     }
 
     @Test
-    void getUser_shouldRejectZeroId() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.getUser(0)
-        );
-
-        assertEquals(
-                "User ID must be greater than zero",
-                exception.getMessage()
-        );
-
-        verifyNoInteractions(userRepository);
+    void aUsernameOverFiftyCharactersIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> service.createUser("a".repeat(51)));
     }
 
     @Test
-    void getUser_shouldRejectNegativeId() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.getUser(-1)
-        );
-
-        assertEquals(
-                "User ID must be greater than zero",
-                exception.getMessage()
-        );
-
-        verifyNoInteractions(userRepository);
+    void aUsernameOfExactlyFiftyCharactersIsAccepted() {
+        assertEquals(50, service.createUser("a".repeat(50)).getUsername().length());
     }
 
     @Test
-    void getUser_shouldReturnUserFromRepository() {
-        User user = new User(
-                1,
-                "caleb",
-                "password123",
-                "2026-10-06T14:00:00"
-        );
-
-        when(userRepository.findById(1))
-                .thenReturn(user);
-
-        User result = userService.getUser(1);
-
-        assertSame(user, result);
-
-        verify(userRepository).findById(1);
-    }
-
-    @Test
-    void getUserByUsername_shouldNormalizeUsernameBeforeSearching() {
-        User user = new User(
-                1,
-                "caleb",
-                "password123",
-                "2026-10-06T14:00:00"
-        );
-
-        when(userRepository.findByUsername("caleb"))
-                .thenReturn(user);
-
-        User result = userService.getUserByUsername(
-                "  CALEB  "
-        );
-
-        assertSame(user, result);
-
-        verify(userRepository).findByUsername("caleb");
-    }
-
-    @Test
-    void getUserByUsername_shouldRejectInvalidUsername() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> userService.getUserByUsername("ab")
-        );
-
-        assertEquals(
-                "Username must be at least 3 characters",
-                exception.getMessage()
-        );
-
-        verifyNoInteractions(userRepository);
-    }
-
-    @Test
-    void getAllUsers_shouldReturnUsersFromRepository() {
-        List<User> users = List.of(
-                new User(1, "caleb", "password123", "2026-10-06T14:00:00"),
-                new User(2, "john", "password456", "2026-10-06T14:01:00")
-        );
-
-        when(userRepository.findAll())
-                .thenReturn(users);
-
-        List<User> result = userService.getAllUsers();
-
-        assertEquals(users, result);
-
-        verify(userRepository).findAll();
+    void aNullUsernameIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> service.createUser(null));
     }
 }
