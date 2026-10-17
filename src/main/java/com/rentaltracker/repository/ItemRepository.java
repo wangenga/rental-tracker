@@ -3,6 +3,7 @@ package com.rentaltracker.repository;
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.infrastructure.DbTime;
+import com.rentaltracker.repository.exception.MappingException;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -94,20 +95,19 @@ public class ItemRepository {
         }
     }
 
-    private ItemDomain mapResultSetToItemDomain(ResultSet resultSet) throws SQLException {
-        ItemStatus itemStatus = ItemStatus.fromDb(resultSet.getString("status"));
-
-        LocalDateTime createdAt = DbTime.parse(resultSet.getString("created_at"));
-
-        return new ItemDomain(
-                resultSet.getInt("item_id"),
-                resultSet.getInt("owner_id"),
-                resultSet.getString("item_name"),
-                resultSet.getString("description"),
-                resultSet.getInt("cost_per_day"),
-                itemStatus,
-                createdAt
-        );
+    private ItemDomain mapResultSetToItemDomain(ResultSet resultSet) {
+        try {
+            return new ItemDomain(
+                    resultSet.getInt("item_id"),
+                    resultSet.getInt("owner_id"),
+                    resultSet.getString("item_name"),
+                    resultSet.getString("description"),
+                    resultSet.getInt("cost_per_day"),
+                    ItemStatus.fromDb(resultSet.getString("status")),
+                    DbTime.parse(resultSet.getString("created_at")));
+        } catch (SQLException | RuntimeException e) {
+            throw new MappingException("Cannot map item row", e);
+        }
     }
 
 
