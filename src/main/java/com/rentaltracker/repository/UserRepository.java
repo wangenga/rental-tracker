@@ -17,10 +17,12 @@ import java.util.Optional;
 /**
  * Handles persistence operations for users.
  *
- * The repository is responsible only for communicating with the database.
- * Business rules and validation belong in the service layer.
+ * The repository only talks to the database. Business rules and validation
+ * belong in the service layer.
  */
 public class UserRepository {
+
+    private static final String COLUMNS = "id, username, password, created_at";
 
     private final Database database;
 
@@ -29,152 +31,103 @@ public class UserRepository {
     }
 
     /**
-     * Finds a user by their ID.
-     *
-     * @param id user ID
-     * @return the matching user
-     * @throws NotFoundException if no user exists with the given ID
+     * @throws NotFoundException   if no user has this id
      * @throws RepositoryException if the database operation fails
      */
     public User findById(long id) {
-        String sql = """
-                SELECT id, username, password, created_at
-                FROM users
-                WHERE id = ?
-                """;
+        String sql = "SELECT " + COLUMNS + " FROM users WHERE id = ?";
 
-        try (PreparedStatement statement =
-                     database.connection().prepareStatement(sql)) {
-
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
             statement.setLong(1, id);
 
             try (ResultSet resultSet = statement.executeQuery()) {
-
                 if (!resultSet.next()) {
-                    throw new NotFoundException(
-                            "User with id " + id + " was not found"
-                    );
+                    throw new NotFoundException("User with id " + id + " was not found");
                 }
-
                 return mapRow(resultSet);
             }
-
         } catch (SQLException e) {
-            throw SqlExceptionTranslator.translate(
-                    "Failed to find user with id " + id, e);
+            throw SqlExceptionTranslator.translate("find user by id", e);
         }
     }
 
     /**
-     * Finds a user by their username.
-     *
-     * @param username username to search for
-     * @return the matching user
-     * @throws NotFoundException if no user exists with the username
+     * @return the matching user, or empty if nobody has this username
      * @throws RepositoryException if the database operation fails
      */
-    public User findByUsername(String username) {
-        String sql = """
-                SELECT id, username, password, created_at
-                FROM users
-                WHERE username = ?
-                """;
+    public Optional<User> findByUsername(String username) {
+        String sql = "SELECT " + COLUMNS + " FROM users WHERE username = ?";
 
-        try (PreparedStatement statement =
-                     database.connection().prepareStatement(sql)) {
-
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
             statement.setString(1, username);
 
             try (ResultSet resultSet = statement.executeQuery()) {
-
-                if (!resultSet.next()) {
-                    throw new NotFoundException(
-                            "User with username '" + username + "' was not found"
-                    );
-                }
-
-                return mapRow(resultSet);
+                return resultSet.next() ? Optional.of(mapRow(resultSet)) : Optional.empty();
             }
-
         } catch (SQLException e) {
-            throw SqlExceptionTranslator.translate("Failed to find user with username " + username, e);
+            throw SqlExceptionTranslator.translate("find user by username", e);
         }
     }
 
     /**
-     * Retrieves all users ordered by ID.
+     * The lowest-id user. By convention this is the owner.
      *
-     * @return list of all users
-     * @throws RepositoryException if the database operation fails
+     * @return the first user, or empty if there are no users yet
      */
-    public List<User> findAll() {
-        String sql = """
-                SELECT id, username, password, created_at
-                FROM users
-                ORDER BY id
-                """;
+    public Optional<User> findFirst() {
+        String sql = "SELECT " + COLUMNS + " FROM users ORDER BY id LIMIT 1";
 
+        try (PreparedStatement statement = database.connection().prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            return resultSet.next() ? Optional.of(mapRow(resultSet)) : Optional.empty();
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("find first user", e);
+        }
+    }
+
+    /** All users ordered by id. */
+    public List<User> findAll() {
+        String sql = "SELECT " + COLUMNS + " FROM users ORDER BY id";
         List<User> users = new ArrayList<>();
 
-        try (
-                PreparedStatement statement =
-                        database.connection().prepareStatement(sql);
-                ResultSet resultSet = statement.executeQuery()
-        ) {
+        try (PreparedStatement statement = database.connection().prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) {
                 users.add(mapRow(resultSet));
             }
-
             return users;
-
         } catch (SQLException e) {
-            throw SqlExceptionTranslator.translate("Failed to retrieve users", e);
+            throw SqlExceptionTranslator.translate("find all users", e);
         }
     }
 
     /**
-     * Creates a new user and returns the persisted record.
+     * Creates a user and returns the stored row.
+     * RETURNING lets SQLite hand back the new row without a second query.
      *
-     * <p>The RETURNING clause allows SQLite to return the newly created row
-     * without requiring a second SELECT query.</p>
-     *
-     * @param user user to save
-     * @return the persisted user
      * @throws RepositoryException if the database operation fails
+     *         (a duplicate username surfaces as a UNIQUE constraint violation)
      */
     public User save(User user) {
-        String sql = """
-                INSERT INTO users (username, password)
-                VALUES (?, ?)
-                RETURNING id, username, password, created_at
-                """;
+        String sql = "INSERT INTO users (username, password) VALUES (?, ?) "
+                   + "RETURNING " + COLUMNS;
 
-        try (PreparedStatement statement =
-                     database.connection().prepareStatement(sql)) {
-
-            // Parameterized SQL keeps user input separate from the query.
+        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {
             statement.setString(1, user.getUsername());
             statement.setString(2, user.getPassword());
 
             try (ResultSet resultSet = statement.executeQuery()) {
-
                 if (!resultSet.next()) {
-                    throw new RepositoryException(
-                            "Failed to retrieve the created user"
-                    );
+                    throw new RepositoryException("Failed to retrieve the created user");
                 }
-
                 return mapRow(resultSet);
             }
-
         } catch (SQLException e) {
-            throw SqlExceptionTranslator.translate("Failed to save user " + user.getUsername(), e);
+            throw SqlExceptionTranslator.translate("save user", e);
         }
     }
 
-    /**
-     * Maps the current database row to a User domain object.
-     */
+    /** Maps the current row to a User. A row that cannot be read is a MappingException. */
     private User mapRow(ResultSet resultSet) {
         try {
             return new User(
@@ -184,17 +137,6 @@ public class UserRepository {
                     resultSet.getString("created_at"));
         } catch (SQLException e) {
             throw new MappingException("Cannot map user row", e);
-        }
-    }
-
-    /** The lowest-id user. By convention this is the owner. */
-    public Optional<User> findFirst() {
-        String sql = "SELECT id, username, password, created_at FROM users ORDER BY id LIMIT 1";
-        try (PreparedStatement statement = database.connection().prepareStatement(sql);
-            ResultSet resultSet = statement.executeQuery()) {
-            return resultSet.next() ? Optional.of(mapRow(resultSet)) : Optional.empty();
-        } catch (SQLException e) {
-            throw SqlExceptionTranslator.translate("find first user", e);
         }
     }
 }
