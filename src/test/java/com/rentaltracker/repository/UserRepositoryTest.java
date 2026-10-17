@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -100,7 +101,7 @@ class UserRepositoryTest {
         );
 
         User foundUser =
-                userRepository.findByUsername("alice");
+                userRepository.findByUsername("alice").orElseThrow();
 
         assertTrue(foundUser.getId() > 0);
         assertEquals("alice", foundUser.getUsername());
@@ -109,13 +110,9 @@ class UserRepositoryTest {
     }
 
     @Test
-    void findByUsername_throwsNotFoundExceptionWhenUserDoesNotExist() {
-
-        assertThrows(
-                NotFoundException.class,
-                () -> userRepository.findByUsername("does-not-exist")
-        );
-    }
+        void findByUsername_isEmptyWhenUserDoesNotExist() {
+        assertTrue(userRepository.findByUsername("nobody").isEmpty());
+        }
 
     @Test
     void findAll_returnsAllUsersOrderedById() {
