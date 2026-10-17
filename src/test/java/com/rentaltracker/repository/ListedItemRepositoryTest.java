@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.exception.MappingException;
 
 class ListedItemRepositoryTest {
 
@@ -225,5 +226,13 @@ class ListedItemRepositoryTest {
         assertEquals(item.getItemName(),  loaded.getItemName());
         assertEquals(item.getOwnerId(),   loaded.getOwnerId());
         assertEquals(item.getCostPerDay(), loaded.getCostPerDay());
+    }
+
+    @Test
+    void findingARowWithAnUnreadableTimestampThrowsMappingException() throws SQLException {
+        exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day, created_at) "
+           + "VALUES (1, 'Ladder', 'x', 5, 'garbage')");
+    
+        assertThrows(MappingException.class, () -> items.findByItemId(1));
     }
 }
