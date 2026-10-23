@@ -52,3 +52,8 @@ CREATE TABLE IF NOT EXISTS  rentals (
 --only one active rental per item
 CREATE UNIQUE INDEX IF NOT EXISTS index_one_active_rental_per_item
     ON rentals(item_id) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS app_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
