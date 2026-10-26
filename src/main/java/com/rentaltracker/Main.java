@@ -20,6 +20,7 @@ import com.rentaltracker.service.RentalService;
 import com.rentaltracker.service.UserService;
 import com.rentaltracker.transport.MainMenu;
 import com.rentaltracker.transport.Prompter;
+import com.rentaltracker.transport.screens.ConfirmReturnScreen;
 import com.rentaltracker.transport.screens.RecordRentalScreen;
 import com.rentaltracker.transport.screens.StartupScreen;
 
@@ -58,7 +59,8 @@ public class Main {
         RentalService rentals = new RentalService(itemRepository, rentalRepository, users, tx, clock);
 
         return new MainMenu(prompter,
-                new RecordRentalScreen(prompter, rentals));   // pass `me` if the screen needs it
+                new RecordRentalScreen(prompter, rentals),
+                new ConfirmReturnScreen(prompter, rentals));   // pass `me` if the screen needs it
     }
 
 
