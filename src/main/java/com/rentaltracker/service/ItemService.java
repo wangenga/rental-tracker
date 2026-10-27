@@ -22,11 +22,11 @@ public class ItemService {
 
     //This first method is invoked when it is called and status is not given as a parameter.
     //Defaults to available. However, the user can create an item and set the status to something else.
-    public ItemDomain createItem(int ownerId, String itemName, String description, int costPerDay) throws SQLException {
+    public ItemDomain createItem(int ownerId, String itemName, String description, int costPerDay) {
         return createItem(ownerId, itemName, description, costPerDay, ItemStatus.available);
     }
 
-    public ItemDomain createItem(int ownerId, String itemName, String description, int costPerDay, ItemStatus status) throws SQLException {
+    public ItemDomain createItem(int ownerId, String itemName, String description, int costPerDay, ItemStatus status)  {
         validateOwnerId(ownerId);
         validateItemName(itemName);
         validateCostPerDay(costPerDay);
@@ -47,28 +47,28 @@ public class ItemService {
     }
 
     //READ
-    public Optional<ItemDomain> getItemById(int itemId) throws SQLException {
+    public Optional<ItemDomain> getItemById(int itemId)  {
         validateItemId(itemId);
         return itemRepository.findByItemId(itemId);
     }
 
-    public ItemDomain requireItemById(int itemId) throws SQLException {
+    public ItemDomain requireItemById(int itemId)  {
         return getItemById(itemId)
                 .orElseThrow(() -> new IllegalArgumentException("Item not found: " + itemId));
     }
 
-    public List<ItemDomain> getAllItems() throws SQLException {
+    public List<ItemDomain> getAllItems()  {
         return itemRepository.findAll();
     }
 
-    public List<ItemDomain> getItemsByOwner(int ownerId) throws SQLException {
+    public List<ItemDomain> getItemsByOwner(int ownerId)  {
         validateOwnerId(ownerId);
         return itemRepository.findAll().stream()
                 .filter(i -> i.getOwnerId() == ownerId)
                 .collect(Collectors.toList());
     }
 
-    public List<ItemDomain> getItemsByStatus(ItemStatus status) throws SQLException {
+    public List<ItemDomain> getItemsByStatus(ItemStatus status)  {
         if (status == null) {
             throw new IllegalArgumentException("Status cannot be null");
         }
@@ -78,7 +78,7 @@ public class ItemService {
     }
 
     //UPDATE
-    public ItemDomain updateItem(int itemId, String itemName, String description, int costPerDay, ItemStatus status) throws SQLException {
+    public ItemDomain updateItem(int itemId, String itemName, String description, int costPerDay, ItemStatus status)  {
         validateItemId(itemId);
         validateItemName(itemName);
         validateCostPerDay(costPerDay);
@@ -96,7 +96,7 @@ public class ItemService {
         return existing;
     }
 
-    public ItemDomain changeStatus(int itemId, ItemStatus newStatus) throws SQLException {
+    public ItemDomain changeStatus(int itemId, ItemStatus newStatus)  {
         if (newStatus == null) {
             throw new IllegalArgumentException("Status cannot be null");
         }
@@ -107,7 +107,7 @@ public class ItemService {
     }
 
     //DELETE
-    public boolean deleteItem(int itemId) throws SQLException {
+    public boolean deleteItem(int itemId)  {
         validateItemId(itemId);
         if (itemRepository.findByItemId(itemId).isEmpty()) {
             return false;
