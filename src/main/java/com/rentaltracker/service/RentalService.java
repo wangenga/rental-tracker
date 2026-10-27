@@ -10,6 +10,7 @@ import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.domain.enums.RentalStatus;
+import com.rentaltracker.domain.view.ActiveRentalView;
 import com.rentaltracker.repository.ItemRepository;
 import com.rentaltracker.repository.RentalRepository;
 import com.rentaltracker.repository.Transactor;
@@ -49,6 +50,10 @@ public class RentalService {
     /** Active rentals on the owner's items, soonest due date first. */
     public List<RentalDomain> getActiveRentals(int ownerId) {
         return rentals.findActiveByOwner(ownerId);
+    }
+
+    public List<ActiveRentalView> getActiveRentalViews(int ownerId) {
+        return rentals.findActiveViewsByOwner(ownerId);
     }
 
     // ---------- record a rental ----------

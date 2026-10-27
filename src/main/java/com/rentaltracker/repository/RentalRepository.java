@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 
 import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.domain.enums.RentalStatus;
+import com.rentaltracker.domain.view.ActiveRentalView;
 import com.rentaltracker.infrastructure.Database;
 import com.rentaltracker.infrastructure.DbTime;
 import com.rentaltracker.repository.exception.MappingException;
@@ -93,6 +94,29 @@ public class RentalRepository {
         }
     }
 
+    //Used on confirming a return, where item name and renter name are required.
+    public List<ActiveRentalView> findActiveViewsByOwner(long ownerId) {
+        String sql = "SELECT r.rental_id, i.item_name, u.username, "
+                + "       r.start_time, r.end_time, r.status "
+                + "FROM rentals r "
+                + "JOIN listed_items i ON i.item_id = r.item_id "
+                + "JOIN users       u ON u.id = r.renter_id "
+                + "WHERE i.owner_id = ? AND r.status = 'active' "
+                + "ORDER BY r.end_time ASC";
+        try (PreparedStatement ps = db.connection().prepareStatement(sql)) {
+            ps.setLong(1, ownerId);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<ActiveRentalView> out = new ArrayList<>();
+                while (rs.next()) out.add(mapView(rs));
+                return out;
+            }
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("find active rental views by owner", e);
+        }
+    }
+
+
+
     /**
      * Closes an active rental. Status and returned_at are set in one UPDATE,
      * because the schema CHECK requires them to change together.
@@ -126,6 +150,21 @@ public class RentalRepository {
             
         }catch (SQLException | RuntimeException e) {
             throw new MappingException("Cannot map rental row", e);
+        }
+    }
+
+    //MAP RESULTS WITH ITEM NAME AND RENTER NAME
+    private ActiveRentalView mapView(ResultSet rs) {
+        try {
+            return new ActiveRentalView(
+                    rs.getLong("rental_id"),
+                    rs.getString("item_name"),
+                    rs.getString("username"),
+                    DbTime.parse(rs.getString("start_time")),
+                    DbTime.parse(rs.getString("end_time")),
+                    RentalStatus.fromDb(rs.getString("status")));
+        } catch (SQLException | RuntimeException e) {
+            throw new MappingException("Cannot map active rental view", e);
         }
     }
 
