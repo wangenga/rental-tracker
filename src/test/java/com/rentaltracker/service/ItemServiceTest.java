@@ -3,44 +3,57 @@ package com.rentaltracker.service;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Path;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.rentaltracker.domain.ItemDomain;
+import com.rentaltracker.domain.RentalDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
+import com.rentaltracker.domain.enums.RentalStatus;
 import com.rentaltracker.infrastructure.Database;
 import com.rentaltracker.repository.ItemRepository;
+import com.rentaltracker.repository.RentalRepository;
+import com.rentaltracker.repository.SqliteTransactor;
+import com.rentaltracker.repository.UserRepository;
+import com.rentaltracker.repository.exception.ConstraintViolationException;
+import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.service.exception.BusinessRuleException;
 
 class ItemServiceTest {
 
+    static final LocalDateTime START = LocalDateTime.of(2026, 6, 10, 9, 0);
+    static final LocalDateTime END = LocalDateTime.of(2026, 6, 13, 9, 0);
+
     @TempDir Path tempDir;
     Database db;
-    ItemRepository itemRepository;
+    RentalRepository rentals;
     ItemService service;
 
     @BeforeEach
     void setUp() throws SQLException {
         db = new Database(tempDir.resolve("test.db").toString());
-        itemRepository = new ItemRepository(db.connection());
-        service = new ItemService(itemRepository);
-
-        // users: 1 and 2 (both can own items)
-        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis')");
+        rentals = new RentalRepository(db);
+        service = new ItemService(new ItemRepository(db.connection()), rentals,
+                new UserService(new UserRepository(db)), new SqliteTransactor(db));
+        // 1 = owner, 2 = renter, 3 = a second owner
+        exec("INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')");
     }
 
     @AfterEach
     void tearDown() { db.close(); }
 
-    // ---- helpers that talk to the database directly ----
+    // ---------- helpers that talk to the database directly ----------
 
     private void exec(String sql) throws SQLException {
         try (Statement st = db.connection().createStatement()) { st.execute(sql); }
@@ -48,394 +61,226 @@ class ItemServiceTest {
 
     private String query(String sql) throws SQLException {
         try (Statement st = db.connection().createStatement();
-             var rs = st.executeQuery(sql)) {
+             ResultSet rs = st.executeQuery(sql)) {
             rs.next();
             return rs.getString(1);
         }
     }
 
-    // =================================================================
-    // createItem
-    // =================================================================
+    private String itemStatus(long id) throws SQLException {
+        return query("SELECT status FROM listed_items WHERE item_id = " + id);
+    }
+
+    private String itemCount() throws SQLException {
+        return query("SELECT count(*) FROM listed_items");
+    }
+
+    private long addItem(int ownerId, String name, ItemStatus status) throws SQLException {
+        exec("INSERT INTO listed_items (owner_id, item_name, description, cost_per_day, status) "
+           + "VALUES (" + ownerId + ", '" + name + "', 'x', 5, '" + status.name() + "')");
+        return Long.parseLong(query("SELECT last_insert_rowid()"));
+    }
+
+    private long addActiveRental(long itemId) {
+        return rentals.insert(new RentalDomain(0, itemId, 2, START, END, null, RentalStatus.ACTIVE));
+    }
+
+    // ---------- createItem ----------
 
     @Test
-    void createItemDefaultsToAvailableStatus() throws SQLException {
-        ItemDomain item = service.createItem(1, "Ladder", "Tall", 5);
+    void createItemListsItAsAvailableAndTrimsTheText() throws SQLException {
+        ItemDomain item = service.createItem(1, "  Ladder ", " 6-step ", 5);
 
-        assertEquals(ItemStatus.available, item.getStatus());
-        assertEquals(1, item.getOwnerId());
-        assertEquals("Ladder", item.getItemName());
-        assertEquals("Tall", item.getDescription());
-        assertEquals(5, item.getCostPerDay());
-        assertNotNull(item.getCreatedAt());
-        assertTrue(item.getItemId() > 0);
+        long id = item.getItemId();
+        assertEquals("available", itemStatus(id));
+        assertEquals("Ladder", query("SELECT item_name FROM listed_items WHERE item_id = " + id));
+        assertEquals("6-step", query("SELECT description FROM listed_items WHERE item_id = " + id));
+        assertEquals("5", query("SELECT cost_per_day FROM listed_items WHERE item_id = " + id));
     }
 
     @Test
-    void createItemPersistsToDatabase() throws SQLException {
-        ItemDomain item = service.createItem(1, "Drill", "Powerful", 4);
-
-        assertEquals("1", query("SELECT count(*) FROM listed_items"));
-        assertTrue(itemRepository.findByItemId(item.getItemId()).isPresent());
-    }
-
-    @Test
-    void createItemTrimsNameAndDescription() throws SQLException {
-        ItemDomain item = service.createItem(1, "  Ladder  ", "  Tall  ", 5);
-
-        assertEquals("Ladder", item.getItemName());
-        assertEquals("Tall", item.getDescription());
-    }
-
-    @Test
-    void createItemWithNullDescriptionBecomesEmptyString() throws SQLException {
+    void aMissingDescriptionIsStoredAsEmptyText() throws SQLException {
         ItemDomain item = service.createItem(1, "Ladder", null, 5);
 
-        assertEquals("", item.getDescription());
+        assertEquals("", query("SELECT description FROM listed_items WHERE item_id = " + item.getItemId()));
     }
 
     @Test
-    void createItemWithExplicitStatusHonoursIt() throws SQLException {
-        ItemDomain item = service.createItem(1, "Ladder", "x", 5, ItemStatus.rented);
+    void aNameOfExactlyOneHundredCharactersIsAccepted() {
+        assertEquals(100, service.createItem(1, "a".repeat(100), "x", 5).getItemName().length());
+    }
 
-        assertEquals(ItemStatus.rented, item.getStatus());
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   ", "\t"})
+    void createItemRejectsABlankNameAndStoresNothing(String name) throws SQLException {
+        assertThrows(IllegalArgumentException.class, () -> service.createItem(1, name, "x", 5));
+
+        assertEquals("0", itemCount());
     }
 
     @Test
-    void createItemWithNullStatusThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> service.createItem(1, "Ladder", "x", 5, null));
+    void createItemRejectsANameOverOneHundredCharacters() throws SQLException {
+        assertThrows(IllegalArgumentException.class, () -> service.createItem(1, "a".repeat(101), "x", 5));
+
+        assertEquals("0", itemCount());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1, -100})
+    void createItemRejectsACostBelowOneAndStoresNothing(int cost) throws SQLException {
+        assertThrows(IllegalArgumentException.class, () -> service.createItem(1, "Ladder", "x", cost));
+
+        assertEquals("0", itemCount());
     }
 
     @Test
-    void createItemWithNonPositiveOwnerThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> service.createItem(0, "Ladder", "x", 5));
-        assertThrows(IllegalArgumentException.class,
-                () -> service.createItem(-1, "Ladder", "x", 5));
+    void aCostOfOneIsAccepted() {
+        assertEquals(1, service.createItem(1, "Ladder", "x", 1).getCostPerDay());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1})
+    void createItemRejectsANonPositiveOwnerId(int ownerId) throws SQLException {
+        assertThrows(IllegalArgumentException.class, () -> service.createItem(ownerId, "Ladder", "x", 5));
+
+        assertEquals("0", itemCount());
     }
 
     @Test
-    void createItemWithNullOrBlankNameThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> service.createItem(1, null, "x", 5));
-        assertThrows(IllegalArgumentException.class,
-                () -> service.createItem(1, "", "x", 5));
-        assertThrows(IllegalArgumentException.class,
-                () -> service.createItem(1, "   ", "x", 5));
+    void createItemForAnUnknownOwnerViolatesTheForeignKey() throws SQLException {
+        assertThrows(ConstraintViolationException.class, () -> service.createItem(99, "Ladder", "x", 5));
+
+        assertEquals("0", itemCount());
+    }
+
+    // ---------- reads ----------
+
+    @Test
+    void getItemByIdFindsAnExistingItem() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.available);
+
+        assertEquals("Ladder", service.getItemById((int) id).orElseThrow().getItemName());
     }
 
     @Test
-    void createItemWithNameLongerThan100CharsThrows() {
-        String longName = "x".repeat(101);
-        assertThrows(IllegalArgumentException.class,
-                () -> service.createItem(1, longName, "x", 5));
-    }
-
-    @Test
-    void createItemWithNameExactly100CharsSucceeds() throws SQLException {
-        String name = "x".repeat(100);
-        ItemDomain item = service.createItem(1, name, "x", 5);
-
-        assertEquals(name, item.getItemName());
-    }
-
-    @Test
-    void createItemWithNegativeCostThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> service.createItem(1, "Ladder", "x", -1));
-    }
-
-    @Test
-    void createItemWithZeroCostThrows()  {
-        assertThrows(Exception.class,
-                () -> service.createItem(1, "Ladder", "x", 0));
-    }
-
-    // =================================================================
-    // getItemById / requireItemById
-    // =================================================================
-
-    @Test
-    void getItemByIdReturnsTheStoredItem() throws SQLException {
-        ItemDomain created = service.createItem(1, "Ladder", "x", 5);
-
-        Optional<ItemDomain> found = service.getItemById(created.getItemId());
-
-        assertTrue(found.isPresent());
-        assertEquals(created.getItemId(), found.get().getItemId());
-        assertEquals("Ladder", found.get().getItemName());
-    }
-
-    @Test
-    void getItemByIdOnMissingReturnsEmpty() throws SQLException {
+    void getItemByIdIsEmptyForAnUnknownId() {
         assertTrue(service.getItemById(999).isEmpty());
     }
 
     @Test
-    void getItemByIdWithNonPositiveIdThrows() {
+    void getItemByIdRejectsANonPositiveId() {
         assertThrows(IllegalArgumentException.class, () -> service.getItemById(0));
-        assertThrows(IllegalArgumentException.class, () -> service.getItemById(-5));
     }
 
     @Test
-    void requireItemByIdReturnsTheItem() throws SQLException {
-        ItemDomain created = service.createItem(1, "Ladder", "x", 5);
-
-        ItemDomain found = service.requireItemById(created.getItemId());
-
-        assertEquals(created.getItemId(), found.getItemId());
+    void requireItemByIdThrowsNotFoundForAnUnknownId() {
+        assertThrows(NotFoundException.class, () -> service.requireItemById(999));
     }
 
     @Test
-    void requireItemByIdOnMissingThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.requireItemById(999));
-    }
+    void getItemsByOwnerReturnsOnlyThatOwnersItemsInIdOrder() throws SQLException {
+        addItem(1, "Ladder", ItemStatus.available);
+        addItem(3, "Saw", ItemStatus.available);
+        addItem(1, "Drill", ItemStatus.unlisted);
 
-    // =================================================================
-    // getAllItems
-    // =================================================================
+        List<String> names = service.getItemsByOwner(1).stream().map(ItemDomain::getItemName).toList();
 
-    @Test
-    void getAllItemsReturnsEveryStoredItem() throws SQLException {
-        service.createItem(1, "A", "x", 1);
-        service.createItem(1, "B", "x", 1);
-        service.createItem(2, "C", "x", 1);
-
-        assertEquals(3, service.getAllItems().size());
+        assertEquals(List.of("Ladder", "Drill"), names);
     }
 
     @Test
-    void getAllItemsIsEmptyWhenNothingExists() throws SQLException {
-        assertTrue(service.getAllItems().isEmpty());
-    }
-
-    // =================================================================
-    // getItemsByOwner
-    // =================================================================
-
-    @Test
-    void getItemsByOwnerFiltersToThatOwner() throws SQLException {
-        service.createItem(1, "A", "x", 1);
-        service.createItem(1, "B", "x", 1);
-        service.createItem(2, "C", "x", 1);
-
-        List<ItemDomain> mine = service.getItemsByOwner(1);
-
-        assertEquals(2, mine.size());
-        assertTrue(mine.stream().allMatch(i -> i.getOwnerId() == 1));
-    }
-
-    @Test
-    void getItemsByOwnerIsEmptyWhenOwnerHasNone() throws SQLException {
-        service.createItem(1, "A", "x", 1);
-
-        assertTrue(service.getItemsByOwner(2).isEmpty());
-    }
-
-    @Test
-    void getItemsByOwnerWithNonPositiveIdThrows() {
+    void getItemsByOwnerRejectsANonPositiveId() {
         assertThrows(IllegalArgumentException.class, () -> service.getItemsByOwner(0));
-        assertThrows(IllegalArgumentException.class, () -> service.getItemsByOwner(-1));
-    }
-
-    // =================================================================
-    // getItemsByStatus
-    // =================================================================
-
-    @Test
-    void getItemsByStatusFiltersCorrectly() throws SQLException {
-        service.createItem(1, "A", "x", 1, ItemStatus.available);
-        service.createItem(1, "B", "x", 1, ItemStatus.rented);
-        service.createItem(1, "C", "x", 1, ItemStatus.available);
-
-        List<ItemDomain> available = service.getItemsByStatus(ItemStatus.available);
-
-        assertEquals(2, available.size());
-        assertTrue(available.stream().allMatch(i -> i.getStatus() == ItemStatus.available));
     }
 
     @Test
-    void getItemsByStatusWithNullThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.getItemsByStatus(null));
+    void getItemDetailIncludesTheOwnersUsername() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.available);
+
+        ItemDetail detail = service.getItemDetail((int) id);
+
+        assertEquals("Ladder", detail.item().getItemName());
+        assertEquals("liisa", detail.ownerUsername());
     }
 
     @Test
-    void getItemsByStatusReturnsEmptyWhenNothingMatches() throws SQLException {
-        service.createItem(1, "A", "x", 1, ItemStatus.available);
-
-        assertTrue(service.getItemsByStatus(ItemStatus.rented).isEmpty());
+    void getItemDetailOnAMissingItemThrowsNotFound() {
+        assertThrows(NotFoundException.class, () -> service.getItemDetail(999));
     }
 
-    // =================================================================
-    // updateItem
-    // =================================================================
+    // ---------- delist ----------
 
     @Test
-    void updateItemChangesAllMutableFields() throws SQLException {
-        ItemDomain created = service.createItem(1, "Old", "old desc", 5);
+    void delistMakesAnAvailableItemUnlisted() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.available);
 
-        ItemDomain updated = service.updateItem(
-                created.getItemId(), "New", "new desc", 9, ItemStatus.rented);
+        service.delist((int) id);
 
-        assertEquals("New", updated.getItemName());
-        assertEquals("new desc", updated.getDescription());
-        assertEquals(9, updated.getCostPerDay());
-        assertEquals(ItemStatus.rented, updated.getStatus());
+        assertEquals("unlisted", itemStatus(id));
     }
 
     @Test
-    void updateItemPersistsChanges() throws SQLException {
-        ItemDomain created = service.createItem(1, "Old", "x", 5);
+    void delistingARentedItemLeavesItsRentalActive() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.rented);
+        long rentalId = addActiveRental(id);
 
-        service.updateItem(created.getItemId(), "New", "new desc", 9, ItemStatus.rented);
+        service.delist((int) id);
 
-        ItemDomain reloaded = service.requireItemById(created.getItemId());
-        assertEquals("New", reloaded.getItemName());
-        assertEquals("new desc", reloaded.getDescription());
-        assertEquals(9, reloaded.getCostPerDay());
-        assertEquals(ItemStatus.rented, reloaded.getStatus());
+        assertEquals("unlisted", itemStatus(id));
+        assertEquals("active", query("SELECT status FROM rentals WHERE rental_id = " + rentalId));
     }
 
     @Test
-    void updateItemPreservesOwnerAndCreatedAt() throws SQLException {
-        ItemDomain created = service.createItem(1, "Old", "x", 5);
-        LocalDateTime originalCreatedAt = created.getCreatedAt();
+    void delistingAnUnlistedItemIsRejected() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.unlisted);
 
-        ItemDomain updated = service.updateItem(
-                created.getItemId(), "New", "x", 5, ItemStatus.available);
+        assertThrows(BusinessRuleException.class, () -> service.delist((int) id));
 
-        assertEquals(1, updated.getOwnerId());
-        assertEquals(originalCreatedAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm")) , updated.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm")));
+        assertEquals("unlisted", itemStatus(id));
     }
 
     @Test
-    void updateItemOnMissingIdThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> service.updateItem(999, "New", "x", 5, ItemStatus.available));
+    void delistingAMissingItemThrowsNotFound() {
+        assertThrows(NotFoundException.class, () -> service.delist(999));
+    }
+
+    // ---------- relist ----------
+
+    @Test
+    void relistMakesAnUnlistedItemAvailable() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.unlisted);
+
+        service.relist((int) id);
+
+        assertEquals("available", itemStatus(id));
     }
 
     @Test
-    void updateItemWithNonPositiveIdThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> service.updateItem(0, "New", "x", 5, ItemStatus.available));
+    void relistIsRefusedWhileTheItemIsStillOutOnARental() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.unlisted);
+        addActiveRental(id);
+
+        assertThrows(BusinessRuleException.class, () -> service.relist((int) id));
+
+        assertEquals("unlisted", itemStatus(id));
     }
 
     @Test
-    void updateItemWithBlankNameThrows() throws SQLException {
-        ItemDomain created = service.createItem(1, "Old", "x", 5);
+    void relistWorksOnceTheRentalHasBeenReturned() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.unlisted);
+        long rentalId = addActiveRental(id);
+        rentals.close(rentalId, LocalDateTime.of(2026, 6, 12, 9, 0));
 
-        assertThrows(IllegalArgumentException.class,
-                () -> service.updateItem(created.getItemId(), "   ", "x", 5, ItemStatus.available));
+        service.relist((int) id);
+
+        assertEquals("available", itemStatus(id));
     }
 
     @Test
-    void updateItemWithNegativeCostThrows() throws SQLException {
-        ItemDomain created = service.createItem(1, "Old", "x", 5);
+    void relistingAnAvailableItemIsRejected() throws SQLException {
+        long id = addItem(1, "Ladder", ItemStatus.available);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> service.updateItem(created.getItemId(), "New", "x", -1, ItemStatus.available));
-    }
-
-    @Test
-    void updateItemWithNullStatusThrows() throws SQLException {
-        ItemDomain created = service.createItem(1, "Old", "x", 5);
-
-        assertThrows(IllegalArgumentException.class,
-                () -> service.updateItem(created.getItemId(), "New", "x", 5, null));
-    }
-
-    @Test
-    void updateItemWithNullDescriptionBecomesEmptyString() throws SQLException {
-        ItemDomain created = service.createItem(1, "Old", "has desc", 5);
-
-        ItemDomain updated = service.updateItem(
-                created.getItemId(), "New", null, 5, ItemStatus.available);
-
-        assertEquals("", updated.getDescription());
-    }
-
-    // =================================================================
-    // changeStatus
-    // =================================================================
-
-    @Test
-    void changeStatusUpdatesStatus() throws SQLException {
-        ItemDomain created = service.createItem(1, "Ladder", "x", 5, ItemStatus.available);
-
-        ItemDomain updated = service.changeStatus(created.getItemId(), ItemStatus.rented);
-
-        assertEquals(ItemStatus.rented, updated.getStatus());
-    }
-
-    @Test
-    void changeStatusPersists() throws SQLException {
-        ItemDomain created = service.createItem(1, "Ladder", "x", 5, ItemStatus.available);
-
-        service.changeStatus(created.getItemId(), ItemStatus.rented);
-
-        assertEquals(ItemStatus.rented,
-                service.requireItemById(created.getItemId()).getStatus());
-    }
-
-    @Test
-    void changeStatusWithNullThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> service.changeStatus(1, null));
-    }
-
-    @Test
-    void changeStatusOnMissingIdThrows() {
-        assertThrows(IllegalArgumentException.class,
-                () -> service.changeStatus(999, ItemStatus.rented));
-    }
-
-    // =================================================================
-    // deleteItem
-    // =================================================================
-
-    @Test
-    void deleteItemReturnsTrueAndRemovesRow() throws SQLException {
-        ItemDomain created = service.createItem(1, "Doomed", "x", 5);
-
-        assertTrue(service.deleteItem(created.getItemId()));
-        assertTrue(service.getItemById(created.getItemId()).isEmpty());
-    }
-
-    @Test
-    void deleteItemOnMissingReturnsFalse() throws SQLException {
-        assertFalse(service.deleteItem(999));
-    }
-
-    @Test
-    void deleteItemWithNonPositiveIdThrows() {
-        assertThrows(IllegalArgumentException.class, () -> service.deleteItem(0));
-        assertThrows(IllegalArgumentException.class, () -> service.deleteItem(-1));
-    }
-
-    @Test
-    void deleteItemLeavesOtherItemsAlone() throws SQLException {
-        ItemDomain kept   = service.createItem(1, "Kept",   "x", 5);
-        ItemDomain doomed = service.createItem(1, "Doomed", "x", 5);
-
-        service.deleteItem(doomed.getItemId());
-
-        assertTrue(service.getItemById(kept.getItemId()).isPresent());
-        assertEquals("1", query("SELECT count(*) FROM listed_items"));
-    }
-
-    // =================================================================
-    // Integration sanity
-    // =================================================================
-
-    @Test
-    void createThenUpdateThenDeleteRoundTrip() throws SQLException {
-        ItemDomain created = service.createItem(1, "RoundTrip", "desc", 7);
-
-        service.updateItem(created.getItemId(), "Renamed", "new", 9, ItemStatus.rented);
-        assertEquals("Renamed", service.requireItemById(created.getItemId()).getItemName());
-
-        assertTrue(service.deleteItem(created.getItemId()));
-        assertTrue(service.getItemById(created.getItemId()).isEmpty());
+        assertThrows(BusinessRuleException.class, () -> service.relist((int) id));
     }
 }
