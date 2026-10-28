@@ -4,8 +4,10 @@ import java.util.List;
 import java.util.Optional;
 
 import com.rentaltracker.domain.ItemDomain;
+import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.service.ItemDetail;
 import com.rentaltracker.service.ItemService;
+import com.rentaltracker.service.exception.BusinessRuleException;
 import com.rentaltracker.transport.Display;
 import com.rentaltracker.transport.ListMenu;
 import com.rentaltracker.transport.Prompter;
@@ -34,7 +36,7 @@ public class InventoryScreen {
         }
     }
 
-    /** Shows the item's details and the owner's username, then waits for the user to go back. */
+    /** Shows the item's details and the owner's username, with an option to delist or relist it. */
     private void showDetail(int itemId) {
         ItemDetail detail = items.getItemDetail(itemId);
         ItemDomain item = detail.item();
@@ -46,8 +48,23 @@ public class InventoryScreen {
         prompter.println(Display.row("status", item.getStatus()));
         prompter.println(Display.row("owner", detail.ownerUsername()));
         prompter.println(Display.row("listed", Display.time(item.getCreatedAt())));
-        prompter.println("1) Back to list");
+        boolean unlisted = item.getStatus() == ItemStatus.unlisted;
+        prompter.println(unlisted ? "1) Relist" : "1) Delist");
+        prompter.println("2) Back to list");
 
-        prompter.askChoice("> ", 1, 1);
+        if (prompter.askChoice("> ", 1, 2) == 2) {
+            return;
+        }
+        changeStatus(item, unlisted);
+    }
+
+    /** Relists an unlisted item, or delists any other. A refused change is shown and the user stays in the screen. */
+    private void changeStatus(ItemDomain item, boolean relist) {
+        try {
+            ItemDomain updated = relist ? items.relist(item.getItemId()) : items.delist(item.getItemId());
+            prompter.println(updated.getItemName() + " is now " + updated.getStatus() + ".");
+        } catch (BusinessRuleException e) {
+            prompter.println(e.getMessage());
+        }
     }
 }
