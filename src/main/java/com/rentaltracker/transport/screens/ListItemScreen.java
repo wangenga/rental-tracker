@@ -20,7 +20,7 @@ public class ListItemScreen {
     }
 
     public void run(int ownerId) {
-        prompter.print.ln();
+        prompter.println();
         prompter.println("=== List an item ===");
         String name = prompter.askNonBlank("Name: ");
         String description = prompter.ask("Description: (optional): ");
