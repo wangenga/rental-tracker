@@ -4,6 +4,7 @@ import com.rentaltracker.domain.ItemDomain;
 import com.rentaltracker.domain.enums.ItemStatus;
 import com.rentaltracker.infrastructure.DbTime;
 import com.rentaltracker.repository.exception.MappingException;
+import com.rentaltracker.repository.exception.SqlExceptionTranslator;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -18,7 +19,7 @@ public class ItemRepository {
         this.connection = connection;
     }
 
-    public void save(ItemDomain item) throws SQLException{
+    public void save(ItemDomain item)  {
         String sql = "INSERT INTO listed_items (owner_id, item_name, description, cost_per_day, status, created_at) " +
                 "VALUES (?,?,?,?,?,?)";
 
@@ -40,10 +41,12 @@ public class ItemRepository {
                     item.setItemId(generatedKeys.getInt(1));
                 }
             }
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("insert item", e);
         }
     }
 
-    public Optional<ItemDomain> findByItemId (int itemId) throws SQLException {
+    public Optional<ItemDomain> findByItemId (int itemId)  {
         String sql = "SELECT item_id, owner_id, item_name, description, cost_per_day, status, created_at FROM listed_items WHERE item_id = ?";
 
         //Give the where id = ? value
@@ -55,11 +58,13 @@ public class ItemRepository {
                     return Optional.of(mapResultSetToItemDomain(resultSet));
                 }
             }
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("find item by id", e);
         }
         return Optional.empty();
     }
 
-    public List<ItemDomain> findAll() throws SQLException {
+    public List<ItemDomain> findAll() {
         String sql = "SELECT item_id, owner_id, item_name, description, cost_per_day, status, created_at FROM listed_items";
         List<ItemDomain> listedItems= new ArrayList<>();
 
@@ -68,11 +73,13 @@ public class ItemRepository {
             while (resultSet.next()){
                 listedItems.add(mapResultSetToItemDomain(resultSet));
             }
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("find all items", e);
         }
         return listedItems;
     }
 
-    public void update(ItemDomain item) throws SQLException {
+    public void update(ItemDomain item)  {
         String sql = "UPDATE listed_items SET owner_id = ?, item_name = ?, description = ?, cost_per_day = ?, status = ? WHERE item_id = ?";
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -83,15 +90,19 @@ public class ItemRepository {
             statement.setString(5, item.getStatus().name());
             statement.setInt(6, item.getItemId());
             statement.executeUpdate();
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("update existing item", e);
         }
     }
 
-    public void deleteById (int itemId) throws SQLException {
+    public void deleteById (int itemId)  {
         String sql = "DELETE FROM listed_items WHERE item_id = ?";
 
         try(PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, itemId);
             statement.executeUpdate();
+        } catch (SQLException e) {
+            throw SqlExceptionTranslator.translate("delete item by id", e);
         }
     }
 

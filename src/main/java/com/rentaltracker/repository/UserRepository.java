@@ -127,6 +127,7 @@ public class UserRepository {
         }
     }
 
+
     /** Maps the current row to a User. A row that cannot be read is a MappingException. */
     private User mapRow(ResultSet resultSet) {
         try {

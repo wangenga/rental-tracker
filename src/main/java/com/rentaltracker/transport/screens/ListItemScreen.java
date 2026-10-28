@@ -23,7 +23,7 @@ public class ListItemScreen {
         prompter.println();
         prompter.println("=== List an item ===");
         String name = prompter.askNonBlank("Name: ");
-        String description = prompter.ask("Description: (optional): ");
+        String description = prompter.ask("Description (optional): ");
         int costPerDay = prompter.askInt("Cost per day: ");
 
         ItemDomain item = items.createItem(ownerId, name, description, costPerDay);

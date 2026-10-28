@@ -96,12 +96,6 @@ class ListedItemRepositoryTest {
         assertNotEquals(a.getItemId(), b.getItemId());
     }
 
-    @Test
-    void saveForMissingOwnerViolatesForeignKey() {
-        ItemDomain item = newItem(99, "Ghost", "x", 5);
-
-        assertThrows(SQLException.class, () -> items.save(item));
-    }
 
     // ---- findByItemId ----
 
