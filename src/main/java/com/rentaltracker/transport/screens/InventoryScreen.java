@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.rentaltracker.domain.ItemDomain;
+import com.rentaltracker.service.ItemDetail;
 import com.rentaltracker.service.ItemService;
 import com.rentaltracker.transport.Display;
 import com.rentaltracker.transport.ListMenu;
@@ -29,7 +30,24 @@ public class InventoryScreen {
             if (picked.isEmpty()) {
                 return;
             }
-            // TODO: open the detail view
+            showDetail(picked.get().getItemId());
         }
+    }
+
+    /** Shows the item's details and the owner's username, then waits for the user to go back. */
+    private void showDetail(int itemId) {
+        ItemDetail detail = items.getItemDetail(itemId);
+        ItemDomain item = detail.item();
+
+        prompter.println();
+        prompter.println("=== " + item.getItemName() + " ===");
+        prompter.println(Display.row("description", item.getDescription()));
+        prompter.println(Display.row("cost per day", item.getCostPerDay()));
+        prompter.println(Display.row("status", item.getStatus()));
+        prompter.println(Display.row("owner", detail.ownerUsername()));
+        prompter.println(Display.row("listed", Display.time(item.getCreatedAt())));
+        prompter.println("1) Back to list");
+
+        prompter.askChoice("> ", 1, 1);
     }
 }
