@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SchemaTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker</a> &gt; <span class="el_source">SchemaTest.java</span></div><h1>SchemaTest.java</h1><pre class="source lang-java linenums">package com.rentaltracker;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+<span class="fc" id="L19">class SchemaTest {</span>
+
+    @TempDir Path tempDir;
+    Connection conn;
+
+    @BeforeEach
+    void setUp() throws Exception {
+<span class="fc" id="L26">        conn = DriverManager.getConnection(</span>
+<span class="fc" id="L27">                &quot;jdbc:sqlite:&quot; + tempDir.resolve(&quot;schema-test.db&quot;) + &quot;?foreign_keys=on&quot;);</span>
+<span class="fc" id="L28">        loadSchema();</span>
+<span class="fc" id="L29">    }</span>
+
+    @AfterEach
+    void tearDown() throws SQLException {
+<span class="fc" id="L33">        conn.close();</span>
+<span class="fc" id="L34">    }</span>
+
+    // ---------- helpers ----------
+
+    private void loadSchema() throws Exception {
+<span class="fc" id="L39">        try (InputStream in = getClass().getResourceAsStream(&quot;/schema.sql&quot;)) {</span>
+<span class="fc" id="L40">            assertNotNull(in, &quot;schema.sql not found on classpath&quot;);</span>
+<span class="fc" id="L41">            String script = new String(in.readAllBytes(), StandardCharsets.UTF_8);</span>
+<span class="fc" id="L42">            try (Statement st = conn.createStatement()) {</span>
+<span class="fc bfc" id="L43" title="All 2 branches covered.">                for (String sql : script.split(&quot;;&quot;)) {</span>
+<span class="pc bpc" id="L44" title="1 of 2 branches missed.">                    if (!sql.isBlank()) {</span>
+<span class="fc" id="L45">                        st.execute(sql);</span>
+                    }
+                }
+            }
+        }
+<span class="fc" id="L50">    }</span>
+
+    private void exec(String sql) throws SQLException {
+<span class="fc" id="L53">        try (Statement st = conn.createStatement()) {</span>
+<span class="fc" id="L54">            st.execute(sql);</span>
+        }
+<span class="fc" id="L56">    }</span>
+
+    private void assertFails(String expectedMessage, String sql) {
+<span class="pc" id="L59">        SQLException e = assertThrows(SQLException.class, () -&gt; exec(sql));</span>
+<span class="fc" id="L60">        assertTrue(e.getMessage().contains(expectedMessage),</span>
+<span class="fc" id="L61">                &quot;Expected '&quot; + expectedMessage + &quot;' but got: &quot; + e.getMessage());</span>
+<span class="fc" id="L62">    }</span>
+
+    private long count(String sql) throws SQLException {
+<span class="fc" id="L65">        try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(sql)) {</span>
+<span class="fc" id="L66">            rs.next();</span>
+<span class="fc" id="L67">            return rs.getLong(1);</span>
+        }
+    }
+
+    private void seedOwnerRenterAndItem() throws SQLException {
+<span class="fc" id="L72">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L73">        exec(&quot;INSERT INTO users(username) VALUES ('meelis')&quot;);</span>
+<span class="fc" id="L74">        exec(&quot;INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) &quot;</span>
+                + &quot;VALUES (1, 'Ladder', '6-step', 5)&quot;);
+<span class="fc" id="L76">    }</span>
+
+    private static final String ACTIVE_RENTAL =
+            &quot;INSERT INTO rentals(item_id, renter_id, start_time, end_time) &quot;
+            + &quot;VALUES (1, 2, '2026-06-16 14:30', '2026-06-19 14:30')&quot;;
+
+    // ---------- structure and defaults ----------
+
+    @Test
+    void createsExactlyTheThreeTables() throws SQLException {
+<span class="fc" id="L86">        assertEquals(3, count(&quot;SELECT count(*) FROM sqlite_master &quot;</span>
+                + &quot;WHERE type = 'table' AND name NOT LIKE 'sqlite_%'&quot;));
+<span class="fc" id="L88">        assertEquals(3, count(&quot;SELECT count(*) FROM sqlite_master WHERE type = 'table' &quot;</span>
+                + &quot;AND name IN ('users', 'listed_items', 'rentals')&quot;));
+<span class="fc" id="L90">    }</span>
+
+    @Test
+    void runningTheSchemaTwiceIsHarmless() throws Exception {
+<span class="fc" id="L94">        seedOwnerRenterAndItem();</span>
+
+<span class="fc" id="L96">        loadSchema();   // what happens on every app start</span>
+
+<span class="fc" id="L98">        assertEquals(2, count(&quot;SELECT count(*) FROM users&quot;));</span>
+<span class="fc" id="L99">        assertEquals(1, count(&quot;SELECT count(*) FROM listed_items&quot;));</span>
+<span class="fc" id="L100">    }</span>
+
+    @Test
+    void defaultsAreApplied() throws SQLException {
+<span class="fc" id="L104">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L105">        try (Statement st = conn.createStatement();</span>
+<span class="fc" id="L106">             ResultSet rs = st.executeQuery(&quot;SELECT status, created_at FROM listed_items&quot;)) {</span>
+<span class="fc" id="L107">            rs.next();</span>
+<span class="fc" id="L108">            assertEquals(&quot;available&quot;, rs.getString(&quot;status&quot;));</span>
+<span class="fc" id="L109">            assertTrue(rs.getString(&quot;created_at&quot;).matches(&quot;\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}&quot;),</span>
+<span class="fc" id="L110">                    &quot;created_at should look like 2026-06-16 14:30 but was &quot; + rs.getString(&quot;created_at&quot;));</span>
+        }
+<span class="fc" id="L112">    }</span>
+
+    // ---------- users ----------
+
+    @Test
+    void duplicateUsernameViolatesUnique() throws SQLException {
+<span class="fc" id="L118">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L119">        assertFails(&quot;UNIQUE constraint failed&quot;, &quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L120">    }</span>
+
+    @Test
+    void blankUsernameViolatesCheck() {
+<span class="fc" id="L124">        assertFails(&quot;CHECK constraint failed&quot;, &quot;INSERT INTO users(username) VALUES ('   ')&quot;);</span>
+<span class="fc" id="L125">    }</span>
+
+    @Test
+    void nullUsernameViolatesNotNull() {
+<span class="fc" id="L129">        assertFails(&quot;NOT NULL constraint failed&quot;, &quot;INSERT INTO users(username) VALUES (NULL)&quot;);</span>
+<span class="fc" id="L130">    }</span>
+
+    // ---------- listed_items ----------
+
+    @Test
+    void itemWithoutNameViolatesNotNull() throws SQLException {
+<span class="fc" id="L136">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L137">        assertFails(&quot;NOT NULL constraint failed&quot;,</span>
+                &quot;INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) &quot;
+                        + &quot;VALUES (1, NULL, 'x', 5)&quot;);
+<span class="fc" id="L140">    }</span>
+
+    @Test
+    void blankItemNameViolatesCheck() throws SQLException {
+<span class="fc" id="L144">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L145">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) &quot;
+                        + &quot;VALUES (1, '  ', 'x', 5)&quot;);
+<span class="fc" id="L148">    }</span>
+
+    @Test
+    void itemWithBadStatusViolatesCheck() throws SQLException {
+<span class="fc" id="L152">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L153">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO listed_items(owner_id, item_name, description, cost_per_day, status) &quot;
+                        + &quot;VALUES (1, 'Drill', 'x', 3, 'broken')&quot;);
+<span class="fc" id="L156">    }</span>
+
+    @Test
+    void zeroCostViolatesCheck() throws SQLException {
+<span class="fc" id="L160">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L161">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) &quot;
+                        + &quot;VALUES (1, 'Drill', 'x', 0)&quot;);
+<span class="fc" id="L164">    }</span>
+
+    @Test
+    void negativeCostViolatesCheck() throws SQLException {
+<span class="fc" id="L168">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L169">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) &quot;
+                        + &quot;VALUES (1, 'Drill', 'x', -1)&quot;);
+<span class="fc" id="L172">    }</span>
+
+    @Test
+    void aCostOfOneIsAccepted() throws SQLException {
+<span class="fc" id="L176">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L177">        exec(&quot;INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) &quot;</span>
+                + &quot;VALUES (1, 'Drill', 'x', 1)&quot;);
+
+<span class="fc" id="L180">        assertEquals(1, count(&quot;SELECT count(*) FROM listed_items&quot;));</span>
+<span class="fc" id="L181">    }</span>
+
+    @Test
+    void itemWithUnknownOwnerViolatesForeignKey() {
+<span class="fc" id="L185">        assertFails(&quot;FOREIGN KEY constraint failed&quot;,</span>
+                &quot;INSERT INTO listed_items(owner_id, item_name, description, cost_per_day) &quot;
+                        + &quot;VALUES (99, 'Drill', 'x', 3)&quot;);
+<span class="fc" id="L188">    }</span>
+
+    // ---------- rentals ----------
+
+    @Test
+    void rentalForMissingItemViolatesForeignKey() throws SQLException {
+<span class="fc" id="L194">        exec(&quot;INSERT INTO users(username) VALUES ('liisa')&quot;);</span>
+<span class="fc" id="L195">        assertFails(&quot;FOREIGN KEY constraint failed&quot;,</span>
+                &quot;INSERT INTO rentals(item_id, renter_id, start_time, end_time) &quot;
+                        + &quot;VALUES (99, 1, '2026-06-16 14:30', '2026-06-19 14:30')&quot;);
+<span class="fc" id="L198">    }</span>
+
+    @Test
+    void rentalWithUnknownRenterViolatesForeignKey() throws SQLException {
+<span class="fc" id="L202">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L203">        assertFails(&quot;FOREIGN KEY constraint failed&quot;,</span>
+                &quot;INSERT INTO rentals(item_id, renter_id, start_time, end_time) &quot;
+                        + &quot;VALUES (1, 99, '2026-06-16 14:30', '2026-06-19 14:30')&quot;);
+<span class="fc" id="L206">    }</span>
+
+    @Test
+    void rentalWithBadStatusViolatesCheck() throws SQLException {
+<span class="fc" id="L210">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L211">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO rentals(item_id, renter_id, start_time, end_time, status) &quot;
+                        + &quot;VALUES (1, 2, '2026-06-16 14:30', '2026-06-19 14:30', 'lost')&quot;);
+<span class="fc" id="L214">    }</span>
+
+    @Test
+    void endBeforeStartViolatesCheck() throws SQLException {
+<span class="fc" id="L218">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L219">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO rentals(item_id, renter_id, start_time, end_time) &quot;
+                        + &quot;VALUES (1, 2, '2026-06-19 14:30', '2026-06-16 14:30')&quot;);
+<span class="fc" id="L222">    }</span>
+
+    @Test
+    void endEqualToStartViolatesCheck() throws SQLException {
+<span class="fc" id="L226">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L227">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO rentals(item_id, renter_id, start_time, end_time) &quot;
+                        + &quot;VALUES (1, 2, '2026-06-16 14:30', '2026-06-16 14:30')&quot;);
+<span class="fc" id="L230">    }</span>
+
+    @Test
+    void activeRentalWithReturnTimeViolatesCheck() throws SQLException {
+<span class="fc" id="L234">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L235">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO rentals(item_id, renter_id, start_time, end_time, returned_at) &quot;
+                        + &quot;VALUES (1, 2, '2026-06-16 14:30', '2026-06-19 14:30', '2026-06-17 10:00')&quot;);
+<span class="fc" id="L238">    }</span>
+
+    @Test
+    void closedRentalWithoutReturnTimeViolatesCheck() throws SQLException {
+<span class="fc" id="L242">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L243">        assertFails(&quot;CHECK constraint failed&quot;,</span>
+                &quot;INSERT INTO rentals(item_id, renter_id, start_time, end_time, status) &quot;
+                        + &quot;VALUES (1, 2, '2026-06-16 14:30', '2026-06-19 14:30', 'closed')&quot;);
+<span class="fc" id="L246">    }</span>
+
+    @Test
+    void secondActiveRentalForSameItemViolatesUnique() throws SQLException {
+<span class="fc" id="L250">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L251">        exec(ACTIVE_RENTAL);</span>
+<span class="fc" id="L252">        assertFails(&quot;UNIQUE constraint failed&quot;, ACTIVE_RENTAL);</span>
+<span class="fc" id="L253">    }</span>
+
+    @Test
+    void newRentalIsAllowedOnceThePreviousOneIsClosed() throws SQLException {
+<span class="fc" id="L257">        seedOwnerRenterAndItem();</span>
+<span class="fc" id="L258">        exec(ACTIVE_RENTAL);</span>
+<span class="fc" id="L259">        exec(&quot;UPDATE rentals SET status = 'closed', returned_at = '2026-06-18 09:00' &quot;</span>
+                + &quot;WHERE rental_id = 1&quot;);
+
+<span class="fc" id="L262">        exec(ACTIVE_RENTAL);</span>
+
+<span class="fc" id="L264">        assertEquals(2, count(&quot;SELECT count(*) FROM rentals WHERE item_id = 1&quot;));</span>
+<span class="fc" id="L265">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

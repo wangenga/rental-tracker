@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ListedItemRepositoryTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.repository</a> &gt; <span class="el_source">ListedItemRepositoryTest.java</span></div><h1>ListedItemRepositoryTest.java</h1><pre class="source lang-java linenums">package com.rentaltracker.repository;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.rentaltracker.domain.ItemDomain;
+import com.rentaltracker.domain.enums.ItemStatus;
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.exception.MappingException;
+
+<span class="fc" id="L23">class ListedItemRepositoryTest {</span>
+
+    @TempDir Path tempDir;
+    Database db;
+    ItemRepository items;
+
+    @BeforeEach
+    void setUp() throws SQLException {
+<span class="fc" id="L31">        db = new Database(tempDir.resolve(&quot;test.db&quot;).toString());</span>
+<span class="fc" id="L32">        items = new ItemRepository(db.connection());</span>
+
+        // users: 1 and 2 (both potential owners)
+<span class="fc" id="L35">        exec(&quot;INSERT INTO users (username) VALUES ('liisa'), ('meelis')&quot;);</span>
+<span class="fc" id="L36">    }</span>
+
+    @AfterEach
+<span class="fc" id="L39">    void tearDown() { db.close(); }</span>
+
+    // ---- helpers that talk to the database directly ----
+
+    private void exec(String sql) throws SQLException {
+<span class="fc" id="L44">        try (Statement st = db.connection().createStatement()) { st.execute(sql); }</span>
+<span class="fc" id="L45">    }</span>
+
+    private String query(String sql) throws SQLException {
+<span class="fc" id="L48">        try (Statement st = db.connection().createStatement();</span>
+<span class="fc" id="L49">             ResultSet rs = st.executeQuery(sql)) {</span>
+<span class="fc" id="L50">            rs.next();</span>
+<span class="fc" id="L51">            return rs.getString(1);</span>
+        }
+    }
+
+    private ItemDomain newItem(int ownerId, String name, String desc, int costPerDay) {
+<span class="fc" id="L56">        return new ItemDomain(0, ownerId, name, desc, costPerDay, ItemStatus.available, null);</span>
+    }
+
+    private ItemDomain saveItem(int ownerId, String name, String desc, int costPerDay)
+            throws SQLException {
+<span class="fc" id="L61">        ItemDomain item = newItem(ownerId, name, desc, costPerDay);</span>
+<span class="fc" id="L62">        items.save(item);</span>
+<span class="fc" id="L63">        return item;</span>
+    }
+
+    // ---- save ----
+
+    @Test
+    void saveStoresTheRowAndSetsTheId() throws SQLException {
+<span class="fc" id="L70">        ItemDomain item = saveItem(1, &quot;Ladder&quot;, &quot;Tall&quot;, 5);</span>
+
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">        assertTrue(item.getItemId() &gt; 0);</span>
+<span class="fc" id="L73">        assertEquals(&quot;1&quot;, query(&quot;SELECT count(*) FROM listed_items&quot;));</span>
+<span class="fc" id="L74">        assertEquals(&quot;1&quot;,     query(&quot;SELECT owner_id FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L75">        assertEquals(&quot;Ladder&quot;, query(&quot;SELECT item_name FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L76">        assertEquals(&quot;Tall&quot;,   query(&quot;SELECT description FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L77">        assertEquals(&quot;5&quot;,     query(&quot;SELECT cost_per_day FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L78">    }</span>
+
+    @Test
+    void saveSetsCreatedAtOnTheDomainObject() throws SQLException {
+<span class="fc" id="L82">        LocalDateTime before = LocalDateTime.now().minusSeconds(1);</span>
+
+<span class="fc" id="L84">        ItemDomain item = saveItem(1, &quot;Drill&quot;, &quot;Powerful&quot;, 4);</span>
+
+<span class="fc" id="L86">        assertNotNull(item.getCreatedAt());</span>
+<span class="fc" id="L87">        assertTrue(item.getCreatedAt().isAfter(before));</span>
+<span class="fc" id="L88">        assertNotNull(query(&quot;SELECT created_at FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L89">    }</span>
+
+    @Test
+    void saveAssignsUniqueIdsToEachItem() throws SQLException {
+<span class="fc" id="L93">        ItemDomain a = saveItem(1, &quot;A&quot;, &quot;x&quot;, 1);</span>
+<span class="fc" id="L94">        ItemDomain b = saveItem(1, &quot;B&quot;, &quot;x&quot;, 1);</span>
+
+<span class="fc" id="L96">        assertNotEquals(a.getItemId(), b.getItemId());</span>
+<span class="fc" id="L97">    }</span>
+
+
+    // ---- findByItemId ----
+
+    @Test
+    void findByItemIdReturnsTheStoredItem() throws SQLException {
+<span class="fc" id="L104">        ItemDomain item = saveItem(1, &quot;Drill&quot;, &quot;Powerful&quot;, 4);</span>
+
+<span class="fc" id="L106">        Optional&lt;ItemDomain&gt; found = items.findByItemId(item.getItemId());</span>
+
+<span class="fc" id="L108">        assertTrue(found.isPresent());</span>
+<span class="fc" id="L109">        ItemDomain loaded = found.get();</span>
+<span class="fc" id="L110">        assertEquals(item.getItemId(), loaded.getItemId());</span>
+<span class="fc" id="L111">        assertEquals(1, loaded.getOwnerId());</span>
+<span class="fc" id="L112">        assertEquals(&quot;Drill&quot;, loaded.getItemName());</span>
+<span class="fc" id="L113">        assertEquals(&quot;Powerful&quot;, loaded.getDescription());</span>
+<span class="fc" id="L114">        assertEquals(4, loaded.getCostPerDay());</span>
+<span class="fc" id="L115">        assertEquals(ItemStatus.available, loaded.getStatus());</span>
+<span class="fc" id="L116">        assertNotNull(loaded.getCreatedAt());</span>
+<span class="fc" id="L117">    }</span>
+
+    @Test
+    void findByItemIdIsEmptyForMissingItem() throws SQLException {
+<span class="fc" id="L121">        assertTrue(items.findByItemId(999).isEmpty());</span>
+<span class="fc" id="L122">    }</span>
+
+    // ---- findAll ----
+
+    @Test
+    void findAllReturnsEveryStoredItem() throws SQLException {
+<span class="fc" id="L128">        saveItem(1, &quot;A&quot;, &quot;x&quot;, 1);</span>
+<span class="fc" id="L129">        saveItem(1, &quot;B&quot;, &quot;x&quot;, 2);</span>
+<span class="fc" id="L130">        saveItem(2, &quot;C&quot;, &quot;x&quot;, 3);</span>
+
+<span class="fc" id="L132">        List&lt;ItemDomain&gt; all = items.findAll();</span>
+
+<span class="fc" id="L134">        assertEquals(3, all.size());</span>
+<span class="fc" id="L135">    }</span>
+
+    @Test
+    void findAllIsEmptyWhenNothingIsStored() throws SQLException {
+<span class="fc" id="L139">        assertTrue(items.findAll().isEmpty());</span>
+<span class="fc" id="L140">    }</span>
+
+    // ---- update ----
+
+    @Test
+    void updateChangesAllMutableFields() throws SQLException {
+<span class="fc" id="L146">        ItemDomain item = saveItem(1, &quot;Old&quot;, &quot;old desc&quot;, 5);</span>
+
+<span class="fc" id="L148">        item.setItemName(&quot;New&quot;);</span>
+<span class="fc" id="L149">        item.setDescription(&quot;new desc&quot;);</span>
+<span class="fc" id="L150">        item.setCostPerDay(9);</span>
+<span class="fc" id="L151">        item.setOwnerId(2);</span>
+<span class="fc" id="L152">        items.update(item);</span>
+
+<span class="fc" id="L154">        assertEquals(&quot;New&quot;,      query(&quot;SELECT item_name FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L155">        assertEquals(&quot;new desc&quot;, query(&quot;SELECT description FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L156">        assertEquals(&quot;9&quot;,       query(&quot;SELECT cost_per_day FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L157">        assertEquals(&quot;2&quot;,       query(&quot;SELECT owner_id FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L158">    }</span>
+
+    @Test
+    void updateChangesStatus() throws SQLException {
+<span class="fc" id="L162">        ItemDomain item = saveItem(1, &quot;Drill&quot;, &quot;x&quot;, 4);</span>
+
+<span class="fc" id="L164">        item.setStatus(ItemStatus.rented);</span>
+<span class="fc" id="L165">        items.update(item);</span>
+
+<span class="fc" id="L167">        assertEquals(ItemStatus.rented,</span>
+<span class="fc" id="L168">                items.findByItemId(item.getItemId()).orElseThrow().getStatus());</span>
+<span class="fc" id="L169">    }</span>
+
+    @Test
+    void updateOnMissingIdIsANoOp() throws SQLException {
+<span class="fc" id="L173">        ItemDomain ghost = newItem(1, &quot;Ghost&quot;, &quot;x&quot;, 1); // itemId == 0</span>
+
+<span class="fc" id="L175">        items.update(ghost);</span>
+
+<span class="fc" id="L177">        assertEquals(&quot;0&quot;, query(&quot;SELECT count(*) FROM listed_items&quot;));</span>
+<span class="fc" id="L178">    }</span>
+
+    // ---- deleteById ----
+
+    @Test
+    void deleteByIdRemovesTheRow() throws SQLException {
+<span class="fc" id="L184">        ItemDomain item = saveItem(1, &quot;Doomed&quot;, &quot;x&quot;, 1);</span>
+
+<span class="fc" id="L186">        items.deleteById(item.getItemId());</span>
+
+<span class="fc" id="L188">        assertEquals(&quot;0&quot;, query(&quot;SELECT count(*) FROM listed_items&quot;));</span>
+<span class="fc" id="L189">        assertTrue(items.findByItemId(item.getItemId()).isEmpty());</span>
+<span class="fc" id="L190">    }</span>
+
+    @Test
+    void deleteByIdLeavesOtherRowsAlone() throws SQLException {
+<span class="fc" id="L194">        ItemDomain kept   = saveItem(1, &quot;Kept&quot;,   &quot;x&quot;, 1);</span>
+<span class="fc" id="L195">        ItemDomain doomed = saveItem(1, &quot;Doomed&quot;, &quot;x&quot;, 1);</span>
+
+<span class="fc" id="L197">        items.deleteById(doomed.getItemId());</span>
+
+<span class="fc" id="L199">        assertEquals(&quot;1&quot;, query(&quot;SELECT count(*) FROM listed_items&quot;));</span>
+<span class="fc" id="L200">        assertTrue(items.findByItemId(kept.getItemId()).isPresent());</span>
+<span class="fc" id="L201">    }</span>
+
+    @Test
+    void deleteByIdOnMissingIdIsANoOp() throws SQLException {
+<span class="fc" id="L205">        saveItem(1, &quot;Kept&quot;, &quot;x&quot;, 1);</span>
+
+<span class="fc" id="L207">        items.deleteById(999);</span>
+
+<span class="fc" id="L209">        assertEquals(&quot;1&quot;, query(&quot;SELECT count(*) FROM listed_items&quot;));</span>
+<span class="fc" id="L210">    }</span>
+
+    // ---- round-trip sanity ----
+
+    @Test
+    void savedItemCanBeReadBackThroughFindByItemId() throws SQLException {
+<span class="fc" id="L216">        ItemDomain item = saveItem(1, &quot;RoundTrip&quot;, &quot;desc&quot;, 7);</span>
+
+<span class="fc" id="L218">        ItemDomain loaded = items.findByItemId(item.getItemId()).orElseThrow();</span>
+
+<span class="fc" id="L220">        assertEquals(item.getItemName(),  loaded.getItemName());</span>
+<span class="fc" id="L221">        assertEquals(item.getOwnerId(),   loaded.getOwnerId());</span>
+<span class="fc" id="L222">        assertEquals(item.getCostPerDay(), loaded.getCostPerDay());</span>
+<span class="fc" id="L223">    }</span>
+
+    @Test
+    void findingARowWithAnUnreadableTimestampThrowsMappingException() throws SQLException {
+<span class="fc" id="L227">        exec(&quot;INSERT INTO listed_items (owner_id, item_name, description, cost_per_day, created_at) &quot;</span>
+           + &quot;VALUES (1, 'Ladder', 'x', 5, 'garbage')&quot;);
+    
+<span class="pc" id="L230">        assertThrows(MappingException.class, () -&gt; items.findByItemId(1));</span>
+<span class="fc" id="L231">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

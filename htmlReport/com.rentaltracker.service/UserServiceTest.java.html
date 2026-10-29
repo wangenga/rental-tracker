@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserServiceTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.service</a> &gt; <span class="el_source">UserServiceTest.java</span></div><h1>UserServiceTest.java</h1><pre class="source lang-java linenums">package com.rentaltracker.service;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import com.rentaltracker.domain.User;
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.UserRepository;
+import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.service.exception.BusinessRuleException;
+
+<span class="fc" id="L24">class UserServiceTest {</span>
+
+    @TempDir Path tempDir;
+    String dbPath;
+    Database db;
+    UserService service;
+
+    @BeforeEach
+    void setUp() {
+<span class="fc" id="L33">        dbPath = tempDir.resolve(&quot;test.db&quot;).toString();</span>
+<span class="fc" id="L34">        db = new Database(dbPath);</span>
+<span class="fc" id="L35">        service = new UserService(new UserRepository(db));</span>
+<span class="fc" id="L36">    }</span>
+
+    @AfterEach
+<span class="fc" id="L39">    void tearDown() { db.close(); }</span>
+
+    // ---------- helpers that talk to the database directly ----------
+
+    private void exec(String sql) throws SQLException {
+<span class="fc" id="L44">        try (Statement st = db.connection().createStatement()) { st.execute(sql); }</span>
+<span class="fc" id="L45">    }</span>
+
+    private String query(Database database, String sql) throws SQLException {
+<span class="fc" id="L48">        try (Statement st = database.connection().createStatement();</span>
+<span class="fc" id="L49">             ResultSet rs = st.executeQuery(sql)) {</span>
+<span class="fc" id="L50">            rs.next();</span>
+<span class="fc" id="L51">            return rs.getString(1);</span>
+        }
+    }
+
+    private String userCount() throws SQLException {
+<span class="fc" id="L56">        return query(db, &quot;SELECT count(*) FROM users&quot;);</span>
+    }
+
+    // ---------- the owner (first launch) ----------
+
+    @Test
+    void firstLaunchHasNoOwner() {
+<span class="fc" id="L63">        assertTrue(service.findOwner().isEmpty());</span>
+<span class="fc" id="L64">    }</span>
+
+    @Test
+    void createOwnerStoresANormalisedUserWithNoPassword() throws SQLException {
+<span class="fc" id="L68">        User owner = service.createOwner(&quot;  Liisa &quot;);</span>
+
+<span class="fc" id="L70">        assertEquals(&quot;liisa&quot;, owner.getUsername());</span>
+<span class="fc" id="L71">        assertEquals(&quot;1&quot;, userCount());</span>
+<span class="fc" id="L72">        assertNull(query(db, &quot;SELECT password FROM users WHERE id = &quot; + owner.getId()));</span>
+<span class="fc" id="L73">    }</span>
+
+    @Test
+    void aSecondRunLoadsTheSameAccountInsteadOfCreatingANewOne() throws SQLException {
+<span class="fc" id="L77">        User created = service.createOwner(&quot;liisa&quot;);</span>
+<span class="fc" id="L78">        db.close();   // the app exits</span>
+
+<span class="fc" id="L80">        try (Database again = new Database(dbPath)) {   // the app starts again</span>
+<span class="fc" id="L81">            UserService secondRun = new UserService(new UserRepository(again));</span>
+
+<span class="fc" id="L83">            User loaded = secondRun.findOwner().orElseThrow();</span>
+
+<span class="fc" id="L85">            assertEquals(created.getId(), loaded.getId());</span>
+<span class="fc" id="L86">            assertEquals(&quot;1&quot;, query(again, &quot;SELECT count(*) FROM users&quot;));</span>
+        }
+<span class="fc" id="L88">    }</span>
+
+    @Test
+    void createOwnerIsRefusedOnceAnyUserExists() throws SQLException {
+<span class="fc" id="L92">        service.createOwner(&quot;liisa&quot;);</span>
+
+<span class="pc" id="L94">        assertThrows(BusinessRuleException.class, () -&gt; service.createOwner(&quot;meelis&quot;));</span>
+
+<span class="fc" id="L96">        assertEquals(&quot;1&quot;, userCount());</span>
+<span class="fc" id="L97">    }</span>
+
+    @Test
+    void createOwnerRejectsAnInvalidNameAndStoresNothing() throws SQLException {
+<span class="pc" id="L101">        assertThrows(IllegalArgumentException.class, () -&gt; service.createOwner(&quot;ab&quot;));</span>
+
+<span class="fc" id="L103">        assertEquals(&quot;0&quot;, userCount());</span>
+<span class="fc" id="L104">    }</span>
+
+    @Test
+    void theOwnerIsTheLowestIdUser() throws SQLException {
+<span class="fc" id="L108">        exec(&quot;INSERT INTO users (id, username) VALUES (5, 'zed'), (2, 'amy')&quot;);</span>
+
+<span class="fc" id="L110">        assertEquals(&quot;amy&quot;, service.findOwner().orElseThrow().getUsername());</span>
+<span class="fc" id="L111">    }</span>
+
+    // ---------- createUser ----------
+
+    @Test
+    void createUserStoresANormalisedUserWithNoPassword() throws SQLException {
+<span class="fc" id="L117">        User user = service.createUser(&quot;  Meelis &quot;);</span>
+
+<span class="fc" id="L119">        assertEquals(&quot;meelis&quot;, user.getUsername());</span>
+<span class="fc" id="L120">        assertNull(query(db, &quot;SELECT password FROM users WHERE id = &quot; + user.getId()));</span>
+<span class="fc" id="L121">        assertEquals(&quot;1&quot;, userCount());</span>
+<span class="fc" id="L122">    }</span>
+
+    @Test
+    void createUserRejectsATakenUsernameEvenWithDifferentCapitalisation() throws SQLException {
+<span class="fc" id="L126">        service.createUser(&quot;meelis&quot;);</span>
+
+<span class="pc" id="L128">        assertThrows(IllegalArgumentException.class, () -&gt; service.createUser(&quot;MEELIS&quot;));</span>
+
+<span class="fc" id="L130">        assertEquals(&quot;1&quot;, userCount());</span>
+<span class="fc" id="L131">    }</span>
+
+    // ---------- findOrCreate ----------
+
+    @Test
+    void findOrCreateCreatesAnUnknownUser() throws SQLException {
+<span class="fc" id="L137">        User user = service.findOrCreate(&quot;newrenter&quot;);</span>
+
+<span class="fc" id="L139">        assertEquals(&quot;newrenter&quot;, user.getUsername());</span>
+<span class="fc" id="L140">        assertEquals(&quot;1&quot;, userCount());</span>
+<span class="fc" id="L141">    }</span>
+
+    @Test
+    void findOrCreateReusesAnExistingUserIgnoringCaseAndSpaces() throws SQLException {
+<span class="fc" id="L145">        User first = service.createUser(&quot;meelis&quot;);</span>
+
+<span class="fc" id="L147">        User again = service.findOrCreate(&quot;  Meelis &quot;);</span>
+
+<span class="fc" id="L149">        assertEquals(first.getId(), again.getId());</span>
+<span class="fc" id="L150">        assertEquals(&quot;1&quot;, userCount());</span>
+<span class="fc" id="L151">    }</span>
+
+    // ---------- reads ----------
+
+    @Test
+    void getUserReturnsTheStoredUser() {
+<span class="fc" id="L157">        User created = service.createUser(&quot;meelis&quot;);</span>
+
+<span class="fc" id="L159">        assertEquals(&quot;meelis&quot;, service.getUser(created.getId()).getUsername());</span>
+<span class="fc" id="L160">    }</span>
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, -1})
+    void getUserRejectsANonPositiveId(long id) {
+<span class="pc" id="L165">        assertThrows(IllegalArgumentException.class, () -&gt; service.getUser(id));</span>
+<span class="fc" id="L166">    }</span>
+
+    @Test
+    void getUserOnAMissingIdThrowsNotFound() {
+<span class="pc" id="L170">        assertThrows(NotFoundException.class, () -&gt; service.getUser(999));</span>
+<span class="fc" id="L171">    }</span>
+
+    @Test
+    void getUserByUsernameFindsAUserFromAnyCapitalisation() {
+<span class="fc" id="L175">        User created = service.createUser(&quot;meelis&quot;);</span>
+
+<span class="fc" id="L177">        assertEquals(created.getId(), service.getUserByUsername(&quot; MEELIS &quot;).getId());</span>
+<span class="fc" id="L178">    }</span>
+
+    @Test
+    void getUserByUsernameOnAnUnknownNameThrowsNotFound() {
+<span class="pc" id="L182">        assertThrows(NotFoundException.class, () -&gt; service.getUserByUsername(&quot;nobody&quot;));</span>
+<span class="fc" id="L183">    }</span>
+
+    @Test
+    void getAllUsersReturnsThemInIdOrder() throws SQLException {
+<span class="fc" id="L187">        exec(&quot;INSERT INTO users (id, username) VALUES (5, 'zed'), (2, 'amy')&quot;);</span>
+
+<span class="fc" id="L189">        List&lt;String&gt; names = service.getAllUsers().stream().map(User::getUsername).toList();</span>
+
+<span class="fc" id="L191">        assertEquals(List.of(&quot;amy&quot;, &quot;zed&quot;), names);</span>
+<span class="fc" id="L192">    }</span>
+
+    // ---------- username validation ----------
+
+    @ParameterizedTest
+    @ValueSource(strings = {&quot;&quot;, &quot;   &quot;, &quot;ab&quot;, &quot;bad name&quot;, &quot;bad-name&quot;, &quot;a!b&quot;})
+    void invalidUsernamesAreRejectedAndNothingIsStored(String name) throws SQLException {
+<span class="pc" id="L199">        assertThrows(IllegalArgumentException.class, () -&gt; service.createUser(name));</span>
+
+<span class="fc" id="L201">        assertEquals(&quot;0&quot;, userCount());</span>
+<span class="fc" id="L202">    }</span>
+
+    @Test
+    void aUsernameOverFiftyCharactersIsRejected() {
+<span class="pc" id="L206">        assertThrows(IllegalArgumentException.class, () -&gt; service.createUser(&quot;a&quot;.repeat(51)));</span>
+<span class="fc" id="L207">    }</span>
+
+    @Test
+    void aUsernameOfExactlyFiftyCharactersIsAccepted() {
+<span class="fc" id="L211">        assertEquals(50, service.createUser(&quot;a&quot;.repeat(50)).getUsername().length());</span>
+<span class="fc" id="L212">    }</span>
+
+    @Test
+    void aNullUsernameIsRejected() {
+<span class="pc" id="L216">        assertThrows(IllegalArgumentException.class, () -&gt; service.createUser(null));</span>
+<span class="fc" id="L217">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MainMenu.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.transport</a> &gt; <span class="el_source">MainMenu.java</span></div><h1>MainMenu.java</h1><pre class="source lang-java linenums">package com.rentaltracker.transport;
+
+import com.rentaltracker.repository.exception.RepositoryException;
+import com.rentaltracker.service.exception.BusinessRuleException;
+import com.rentaltracker.transport.exception.InputClosedException;
+import com.rentaltracker.transport.screens.ConfirmReturnScreen;
+import com.rentaltracker.transport.screens.InventoryScreen;
+import com.rentaltracker.transport.screens.ListItemScreen;
+import com.rentaltracker.transport.screens.RecordRentalScreen;
+import com.rentaltracker.transport.screens.StartupScreen;
+
+public class MainMenu {
+
+    private static final int EXIT = 5;
+
+    private final Prompter prompter;
+    private final StartupScreen startup;
+    private final ListItemScreen listItem;
+    private final InventoryScreen inventory;
+    private final RecordRentalScreen recordRental;
+    private final ConfirmReturnScreen confirmReturn;
+
+    public MainMenu(Prompter prompter, StartupScreen startup, ListItemScreen listItem,
+                    InventoryScreen inventory, RecordRentalScreen recordRental,
+<span class="nc" id="L25">                    ConfirmReturnScreen confirmReturn) {</span>
+<span class="nc" id="L26">        this.prompter = prompter;</span>
+<span class="nc" id="L27">        this.startup = startup;</span>
+<span class="nc" id="L28">        this.listItem = listItem;</span>
+<span class="nc" id="L29">        this.inventory = inventory;</span>
+<span class="nc" id="L30">        this.recordRental = recordRental;</span>
+<span class="nc" id="L31">        this.confirmReturn = confirmReturn;</span>
+<span class="nc" id="L32">    }</span>
+
+    /** Runs until the user exits or the input ends. */
+    public void run() {
+        try {
+<span class="nc" id="L37">            int ownerId = (int) startup.run().getId();</span>
+            while (true) {
+<span class="nc" id="L39">                showMenu();</span>
+<span class="nc" id="L40">                int choice = prompter.askChoice(&quot;&gt; &quot;, 1, EXIT);</span>
+<span class="nc bnc" id="L41" title="All 2 branches missed.">                if (choice == EXIT) {</span>
+<span class="nc" id="L42">                    prompter.println(&quot;Goodbye.&quot;);</span>
+<span class="nc" id="L43">                    return;</span>
+                }
+<span class="nc" id="L45">                runScreen(choice, ownerId);</span>
+<span class="nc" id="L46">            }</span>
+<span class="nc" id="L47">        } catch (InputClosedException e) {</span>
+<span class="nc" id="L48">            prompter.println();</span>
+<span class="nc" id="L49">            prompter.println(&quot;Goodbye.&quot;);</span>
+<span class="nc" id="L50">        } catch (RepositoryException e) {</span>
+<span class="nc" id="L51">            prompter.println(&quot;Database problem: &quot; + e.getMessage());</span>
+<span class="nc" id="L52">        }</span>
+<span class="nc" id="L53">    }</span>
+
+    private void showMenu() {
+<span class="nc" id="L56">        prompter.println();</span>
+<span class="nc" id="L57">        prompter.println(&quot;=== Rental tracker ===&quot;);</span>
+<span class="nc" id="L58">        prompter.println(&quot;1) List an item&quot;);</span>
+<span class="nc" id="L59">        prompter.println(&quot;2) View my inventory&quot;);</span>
+<span class="nc" id="L60">        prompter.println(&quot;3) Record a rental&quot;);</span>
+<span class="nc" id="L61">        prompter.println(&quot;4) Confirm a return&quot;);</span>
+<span class="nc" id="L62">        prompter.println(&quot;5) Exit&quot;);</span>
+<span class="nc" id="L63">    }</span>
+
+    private void runScreen(int choice, int ownerId) {
+        try {
+<span class="nc bnc" id="L67" title="All 4 branches missed.">            switch (choice) {</span>
+<span class="nc" id="L68">                case 1 -&gt; listItem.run(ownerId);</span>
+<span class="nc" id="L69">                case 2 -&gt; inventory.run(ownerId);</span>
+<span class="nc" id="L70">                case 3 -&gt; recordRental.run(ownerId);</span>
+<span class="nc" id="L71">                default -&gt; confirmReturn.run(ownerId);</span>
+            }
+<span class="nc" id="L73">        } catch (IllegalArgumentException | BusinessRuleException e) {</span>
+<span class="nc" id="L74">            prompter.println(&quot;Error: &quot; + e.getMessage());</span>
+<span class="nc" id="L75">        } catch (RepositoryException e) {</span>
+<span class="nc" id="L76">            prompter.println(&quot;Database problem: &quot; + e.getMessage());</span>
+<span class="nc" id="L77">        }</span>
+<span class="nc" id="L78">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

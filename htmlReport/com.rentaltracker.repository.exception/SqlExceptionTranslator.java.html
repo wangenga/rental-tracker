@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SqlExceptionTranslator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.repository.exception</a> &gt; <span class="el_source">SqlExceptionTranslator.java</span></div><h1>SqlExceptionTranslator.java</h1><pre class="source lang-java linenums">package com.rentaltracker.repository.exception;
+
+import java.sql.SQLException;
+
+import org.sqlite.SQLiteException;
+
+import com.rentaltracker.repository.exception.ConstraintViolationException.Type;
+
+public final class SqlExceptionTranslator {
+    private SqlExceptionTranslator(){}
+
+    public static RepositoryException translate(String ops, SQLException e){
+<span class="pc bpc" id="L13" title="1 of 2 branches missed.">        String msg = e.getMessage() == null ? &quot;&quot; : e.getMessage();</span>
+<span class="fc bfc" id="L14" title="All 2 branches covered.">        if (e instanceof SQLiteException se) {</span>
+<span class="fc bfc" id="L15" title="All 5 branches covered.">        switch (se.getResultCode().name()) {</span>
+            case &quot;SQLITE_CONSTRAINT_UNIQUE&quot;, &quot;SQLITE_CONSTRAINT_PRIMARYKEY&quot; -&gt;
+<span class="fc" id="L17">                { return new ConstraintViolationException(Type.UNIQUE, ops + &quot;: &quot; + msg, e); }</span>
+            case &quot;SQLITE_CONSTRAINT_NOTNULL&quot; -&gt;
+<span class="fc" id="L19">                { return new ConstraintViolationException(Type.NOT_NULL, ops + &quot;: &quot; + msg, e); }</span>
+            case &quot;SQLITE_CONSTRAINT_CHECK&quot; -&gt;
+<span class="fc" id="L21">                { return new ConstraintViolationException(Type.CHECK, ops + &quot;: &quot; + msg, e); }</span>
+            case &quot;SQLITE_CONSTRAINT_FOREIGNKEY&quot; -&gt;
+<span class="fc" id="L23">                { return new ConstraintViolationException(Type.FOREIGN_KEY, ops + &quot;: &quot; + msg, e); }</span>
+            default -&gt; { }
+        }
+<span class="fc bfc" id="L26" title="All 2 branches covered.">        if (se.getResultCode().name().startsWith(&quot;SQLITE_CONSTRAINT&quot;)) {</span>
+<span class="fc" id="L27">            return new ConstraintViolationException(Type.OTHER, ops + &quot;: &quot; + msg, e);</span>
+        }
+    }
+<span class="fc" id="L30">        return new RepositoryException(ops + &quot; failed: &quot;+ msg, e);</span>
+    }
+    
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

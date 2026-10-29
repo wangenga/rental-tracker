@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ItemServiceTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.service</a> &gt; <span class="el_source">ItemServiceTest.java</span></div><h1>ItemServiceTest.java</h1><pre class="source lang-java linenums">package com.rentaltracker.service;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import com.rentaltracker.domain.ItemDomain;
+import com.rentaltracker.domain.RentalDomain;
+import com.rentaltracker.domain.enums.ItemStatus;
+import com.rentaltracker.domain.enums.RentalStatus;
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.ItemRepository;
+import com.rentaltracker.repository.RentalRepository;
+import com.rentaltracker.repository.SqliteTransactor;
+import com.rentaltracker.repository.UserRepository;
+import com.rentaltracker.repository.exception.ConstraintViolationException;
+import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.service.exception.BusinessRuleException;
+
+<span class="fc" id="L33">class ItemServiceTest {</span>
+
+<span class="fc" id="L35">    static final LocalDateTime START = LocalDateTime.of(2026, 6, 10, 9, 0);</span>
+<span class="fc" id="L36">    static final LocalDateTime END = LocalDateTime.of(2026, 6, 13, 9, 0);</span>
+
+    @TempDir Path tempDir;
+    Database db;
+    RentalRepository rentals;
+    ItemService service;
+
+    @BeforeEach
+    void setUp() throws SQLException {
+<span class="fc" id="L45">        db = new Database(tempDir.resolve(&quot;test.db&quot;).toString());</span>
+<span class="fc" id="L46">        rentals = new RentalRepository(db);</span>
+<span class="fc" id="L47">        service = new ItemService(new ItemRepository(db.connection()), rentals,</span>
+                new UserService(new UserRepository(db)), new SqliteTransactor(db));
+        // 1 = owner, 2 = renter, 3 = a second owner
+<span class="fc" id="L50">        exec(&quot;INSERT INTO users (username) VALUES ('liisa'), ('meelis'), ('marili')&quot;);</span>
+<span class="fc" id="L51">    }</span>
+
+    @AfterEach
+<span class="fc" id="L54">    void tearDown() { db.close(); }</span>
+
+    // ---------- helpers that talk to the database directly ----------
+
+    private void exec(String sql) throws SQLException {
+<span class="fc" id="L59">        try (Statement st = db.connection().createStatement()) { st.execute(sql); }</span>
+<span class="fc" id="L60">    }</span>
+
+    private String query(String sql) throws SQLException {
+<span class="fc" id="L63">        try (Statement st = db.connection().createStatement();</span>
+<span class="fc" id="L64">             ResultSet rs = st.executeQuery(sql)) {</span>
+<span class="fc" id="L65">            rs.next();</span>
+<span class="fc" id="L66">            return rs.getString(1);</span>
+        }
+    }
+
+    private String itemStatus(long id) throws SQLException {
+<span class="fc" id="L71">        return query(&quot;SELECT status FROM listed_items WHERE item_id = &quot; + id);</span>
+    }
+
+    private String itemCount() throws SQLException {
+<span class="fc" id="L75">        return query(&quot;SELECT count(*) FROM listed_items&quot;);</span>
+    }
+
+    private long addItem(int ownerId, String name, ItemStatus status) throws SQLException {
+<span class="fc" id="L79">        exec(&quot;INSERT INTO listed_items (owner_id, item_name, description, cost_per_day, status) &quot;</span>
+<span class="fc" id="L80">           + &quot;VALUES (&quot; + ownerId + &quot;, '&quot; + name + &quot;', 'x', 5, '&quot; + status.name() + &quot;')&quot;);</span>
+<span class="fc" id="L81">        return Long.parseLong(query(&quot;SELECT last_insert_rowid()&quot;));</span>
+    }
+
+    private long addActiveRental(long itemId) {
+<span class="fc" id="L85">        return rentals.insert(new RentalDomain(0, itemId, 2, START, END, null, RentalStatus.ACTIVE));</span>
+    }
+
+    // ---------- createItem ----------
+
+    @Test
+    void createItemListsItAsAvailableAndTrimsTheText() throws SQLException {
+<span class="fc" id="L92">        ItemDomain item = service.createItem(1, &quot;  Ladder &quot;, &quot; 6-step &quot;, 5);</span>
+
+<span class="fc" id="L94">        long id = item.getItemId();</span>
+<span class="fc" id="L95">        assertEquals(&quot;available&quot;, itemStatus(id));</span>
+<span class="fc" id="L96">        assertEquals(&quot;Ladder&quot;, query(&quot;SELECT item_name FROM listed_items WHERE item_id = &quot; + id));</span>
+<span class="fc" id="L97">        assertEquals(&quot;6-step&quot;, query(&quot;SELECT description FROM listed_items WHERE item_id = &quot; + id));</span>
+<span class="fc" id="L98">        assertEquals(&quot;5&quot;, query(&quot;SELECT cost_per_day FROM listed_items WHERE item_id = &quot; + id));</span>
+<span class="fc" id="L99">    }</span>
+
+    @Test
+    void aMissingDescriptionIsStoredAsEmptyText() throws SQLException {
+<span class="fc" id="L103">        ItemDomain item = service.createItem(1, &quot;Ladder&quot;, null, 5);</span>
+
+<span class="fc" id="L105">        assertEquals(&quot;&quot;, query(&quot;SELECT description FROM listed_items WHERE item_id = &quot; + item.getItemId()));</span>
+<span class="fc" id="L106">    }</span>
+
+    @Test
+    void aNameOfExactlyOneHundredCharactersIsAccepted() {
+<span class="fc" id="L110">        assertEquals(100, service.createItem(1, &quot;a&quot;.repeat(100), &quot;x&quot;, 5).getItemName().length());</span>
+<span class="fc" id="L111">    }</span>
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {&quot;   &quot;, &quot;\t&quot;})
+    void createItemRejectsABlankNameAndStoresNothing(String name) throws SQLException {
+<span class="pc" id="L117">        assertThrows(IllegalArgumentException.class, () -&gt; service.createItem(1, name, &quot;x&quot;, 5));</span>
+
+<span class="fc" id="L119">        assertEquals(&quot;0&quot;, itemCount());</span>
+<span class="fc" id="L120">    }</span>
+
+    @Test
+    void createItemRejectsANameOverOneHundredCharacters() throws SQLException {
+<span class="pc" id="L124">        assertThrows(IllegalArgumentException.class, () -&gt; service.createItem(1, &quot;a&quot;.repeat(101), &quot;x&quot;, 5));</span>
+
+<span class="fc" id="L126">        assertEquals(&quot;0&quot;, itemCount());</span>
+<span class="fc" id="L127">    }</span>
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1, -100})
+    void createItemRejectsACostBelowOneAndStoresNothing(int cost) throws SQLException {
+<span class="pc" id="L132">        assertThrows(IllegalArgumentException.class, () -&gt; service.createItem(1, &quot;Ladder&quot;, &quot;x&quot;, cost));</span>
+
+<span class="fc" id="L134">        assertEquals(&quot;0&quot;, itemCount());</span>
+<span class="fc" id="L135">    }</span>
+
+    @Test
+    void aCostOfOneIsAccepted() {
+<span class="fc" id="L139">        assertEquals(1, service.createItem(1, &quot;Ladder&quot;, &quot;x&quot;, 1).getCostPerDay());</span>
+<span class="fc" id="L140">    }</span>
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1})
+    void createItemRejectsANonPositiveOwnerId(int ownerId) throws SQLException {
+<span class="pc" id="L145">        assertThrows(IllegalArgumentException.class, () -&gt; service.createItem(ownerId, &quot;Ladder&quot;, &quot;x&quot;, 5));</span>
+
+<span class="fc" id="L147">        assertEquals(&quot;0&quot;, itemCount());</span>
+<span class="fc" id="L148">    }</span>
+
+    @Test
+    void createItemForAnUnknownOwnerViolatesTheForeignKey() throws SQLException {
+<span class="pc" id="L152">        assertThrows(ConstraintViolationException.class, () -&gt; service.createItem(99, &quot;Ladder&quot;, &quot;x&quot;, 5));</span>
+
+<span class="fc" id="L154">        assertEquals(&quot;0&quot;, itemCount());</span>
+<span class="fc" id="L155">    }</span>
+
+    // ---------- reads ----------
+
+    @Test
+    void getItemByIdFindsAnExistingItem() throws SQLException {
+<span class="fc" id="L161">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.available);</span>
+
+<span class="fc" id="L163">        assertEquals(&quot;Ladder&quot;, service.getItemById((int) id).orElseThrow().getItemName());</span>
+<span class="fc" id="L164">    }</span>
+
+    @Test
+    void getItemByIdIsEmptyForAnUnknownId() {
+<span class="fc" id="L168">        assertTrue(service.getItemById(999).isEmpty());</span>
+<span class="fc" id="L169">    }</span>
+
+    @Test
+    void getItemByIdRejectsANonPositiveId() {
+<span class="pc" id="L173">        assertThrows(IllegalArgumentException.class, () -&gt; service.getItemById(0));</span>
+<span class="fc" id="L174">    }</span>
+
+    @Test
+    void requireItemByIdThrowsNotFoundForAnUnknownId() {
+<span class="pc" id="L178">        assertThrows(NotFoundException.class, () -&gt; service.requireItemById(999));</span>
+<span class="fc" id="L179">    }</span>
+
+    @Test
+    void getItemsByOwnerReturnsOnlyThatOwnersItemsInIdOrder() throws SQLException {
+<span class="fc" id="L183">        addItem(1, &quot;Ladder&quot;, ItemStatus.available);</span>
+<span class="fc" id="L184">        addItem(3, &quot;Saw&quot;, ItemStatus.available);</span>
+<span class="fc" id="L185">        addItem(1, &quot;Drill&quot;, ItemStatus.unlisted);</span>
+
+<span class="fc" id="L187">        List&lt;String&gt; names = service.getItemsByOwner(1).stream().map(ItemDomain::getItemName).toList();</span>
+
+<span class="fc" id="L189">        assertEquals(List.of(&quot;Ladder&quot;, &quot;Drill&quot;), names);</span>
+<span class="fc" id="L190">    }</span>
+
+    @Test
+    void getItemsByOwnerRejectsANonPositiveId() {
+<span class="pc" id="L194">        assertThrows(IllegalArgumentException.class, () -&gt; service.getItemsByOwner(0));</span>
+<span class="fc" id="L195">    }</span>
+
+    @Test
+    void getItemDetailIncludesTheOwnersUsername() throws SQLException {
+<span class="fc" id="L199">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.available);</span>
+
+<span class="fc" id="L201">        ItemDetail detail = service.getItemDetail((int) id);</span>
+
+<span class="fc" id="L203">        assertEquals(&quot;Ladder&quot;, detail.item().getItemName());</span>
+<span class="fc" id="L204">        assertEquals(&quot;liisa&quot;, detail.ownerUsername());</span>
+<span class="fc" id="L205">    }</span>
+
+    @Test
+    void getItemDetailOnAMissingItemThrowsNotFound() {
+<span class="pc" id="L209">        assertThrows(NotFoundException.class, () -&gt; service.getItemDetail(999));</span>
+<span class="fc" id="L210">    }</span>
+
+    // ---------- delist ----------
+
+    @Test
+    void delistMakesAnAvailableItemUnlisted() throws SQLException {
+<span class="fc" id="L216">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.available);</span>
+
+<span class="fc" id="L218">        service.delist((int) id);</span>
+
+<span class="fc" id="L220">        assertEquals(&quot;unlisted&quot;, itemStatus(id));</span>
+<span class="fc" id="L221">    }</span>
+
+    @Test
+    void delistingARentedItemLeavesItsRentalActive() throws SQLException {
+<span class="fc" id="L225">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.rented);</span>
+<span class="fc" id="L226">        long rentalId = addActiveRental(id);</span>
+
+<span class="fc" id="L228">        service.delist((int) id);</span>
+
+<span class="fc" id="L230">        assertEquals(&quot;unlisted&quot;, itemStatus(id));</span>
+<span class="fc" id="L231">        assertEquals(&quot;active&quot;, query(&quot;SELECT status FROM rentals WHERE rental_id = &quot; + rentalId));</span>
+<span class="fc" id="L232">    }</span>
+
+    @Test
+    void delistingAnUnlistedItemIsRejected() throws SQLException {
+<span class="fc" id="L236">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.unlisted);</span>
+
+<span class="pc" id="L238">        assertThrows(BusinessRuleException.class, () -&gt; service.delist((int) id));</span>
+
+<span class="fc" id="L240">        assertEquals(&quot;unlisted&quot;, itemStatus(id));</span>
+<span class="fc" id="L241">    }</span>
+
+    @Test
+    void delistingAMissingItemThrowsNotFound() {
+<span class="pc" id="L245">        assertThrows(NotFoundException.class, () -&gt; service.delist(999));</span>
+<span class="fc" id="L246">    }</span>
+
+    // ---------- relist ----------
+
+    @Test
+    void relistMakesAnUnlistedItemAvailable() throws SQLException {
+<span class="fc" id="L252">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.unlisted);</span>
+
+<span class="fc" id="L254">        service.relist((int) id);</span>
+
+<span class="fc" id="L256">        assertEquals(&quot;available&quot;, itemStatus(id));</span>
+<span class="fc" id="L257">    }</span>
+
+    @Test
+    void relistIsRefusedWhileTheItemIsStillOutOnARental() throws SQLException {
+<span class="fc" id="L261">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.unlisted);</span>
+<span class="fc" id="L262">        addActiveRental(id);</span>
+
+<span class="pc" id="L264">        assertThrows(BusinessRuleException.class, () -&gt; service.relist((int) id));</span>
+
+<span class="fc" id="L266">        assertEquals(&quot;unlisted&quot;, itemStatus(id));</span>
+<span class="fc" id="L267">    }</span>
+
+    @Test
+    void relistWorksOnceTheRentalHasBeenReturned() throws SQLException {
+<span class="fc" id="L271">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.unlisted);</span>
+<span class="fc" id="L272">        long rentalId = addActiveRental(id);</span>
+<span class="fc" id="L273">        rentals.close(rentalId, LocalDateTime.of(2026, 6, 12, 9, 0));</span>
+
+<span class="fc" id="L275">        service.relist((int) id);</span>
+
+<span class="fc" id="L277">        assertEquals(&quot;available&quot;, itemStatus(id));</span>
+<span class="fc" id="L278">    }</span>
+
+    @Test
+    void relistingAnAvailableItemIsRejected() throws SQLException {
+<span class="fc" id="L282">        long id = addItem(1, &quot;Ladder&quot;, ItemStatus.available);</span>
+
+<span class="pc" id="L284">        assertThrows(BusinessRuleException.class, () -&gt; service.relist((int) id));</span>
+<span class="fc" id="L285">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

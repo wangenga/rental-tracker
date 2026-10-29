@@ -10,6 +10,7 @@ CLI app for renting out your items, backed by SQLite.
 ## Running the app
 
 ```bash
+mvn clean package
 mvn -q exec:java
 ```
 

@@ -1,0 +1,431 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserRepositoryTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.repository</a> &gt; <span class="el_source">UserRepositoryTest.java</span></div><h1>UserRepositoryTest.java</h1><pre class="source lang-java linenums">package com.rentaltracker.repository;
+
+import com.rentaltracker.domain.User;
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.repository.exception.RepositoryException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+<span class="fc" id="L19">class UserRepositoryTest {</span>
+
+    private Path databasePath;
+    private Database database;
+    private UserRepository userRepository;
+
+    @BeforeEach
+    void setUp() throws Exception {
+<span class="fc" id="L27">        databasePath = Files.createTempFile(</span>
+                &quot;rental-tracker-test-&quot;,
+                &quot;.db&quot;
+        );
+
+<span class="fc" id="L32">        database = new Database(databasePath.toString());</span>
+<span class="fc" id="L33">        userRepository = new UserRepository(database);</span>
+<span class="fc" id="L34">    }</span>
+
+    @AfterEach
+    void tearDown() throws Exception {
+<span class="fc" id="L38">        database.close();</span>
+<span class="fc" id="L39">        Files.deleteIfExists(databasePath);</span>
+<span class="fc" id="L40">    }</span>
+
+    @Test
+    void findById_returnsExistingUser() {
+
+<span class="fc" id="L45">        User savedUser = userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;caleb&quot;,
+                        &quot;password123&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L54">        User foundUser =</span>
+<span class="fc" id="L55">                userRepository.findById(savedUser.getId());</span>
+
+<span class="fc" id="L57">        assertEquals(savedUser.getId(), foundUser.getId());</span>
+<span class="fc" id="L58">        assertEquals(&quot;caleb&quot;, foundUser.getUsername());</span>
+<span class="fc" id="L59">        assertEquals(&quot;password123&quot;, foundUser.getPassword());</span>
+<span class="fc" id="L60">        assertNotNull(foundUser.getCreatedAt());</span>
+<span class="fc" id="L61">    }</span>
+
+    @Test
+    void findById_throwsNotFoundExceptionWhenUserDoesNotExist() {
+
+<span class="fc" id="L66">        assertThrows(</span>
+                NotFoundException.class,
+<span class="nc" id="L68">                () -&gt; userRepository.findById(999999)</span>
+        );
+<span class="fc" id="L70">    }</span>
+
+    @Test
+    void findById_throwsNotFoundExceptionForZeroId() {
+
+<span class="fc" id="L75">        assertThrows(</span>
+                NotFoundException.class,
+<span class="nc" id="L77">                () -&gt; userRepository.findById(0)</span>
+        );
+<span class="fc" id="L79">    }</span>
+
+    @Test
+    void findById_throwsNotFoundExceptionForNegativeId() {
+
+<span class="fc" id="L84">        assertThrows(</span>
+                NotFoundException.class,
+<span class="nc" id="L86">                () -&gt; userRepository.findById(-1)</span>
+        );
+<span class="fc" id="L88">    }</span>
+
+    @Test
+    void findByUsername_returnsExistingUser() {
+
+<span class="fc" id="L93">        userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;alice&quot;,
+                        &quot;secret123&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L102">        User foundUser =</span>
+<span class="fc" id="L103">                userRepository.findByUsername(&quot;alice&quot;).orElseThrow();</span>
+
+<span class="pc bpc" id="L105" title="1 of 2 branches missed.">        assertTrue(foundUser.getId() &gt; 0);</span>
+<span class="fc" id="L106">        assertEquals(&quot;alice&quot;, foundUser.getUsername());</span>
+<span class="fc" id="L107">        assertEquals(&quot;secret123&quot;, foundUser.getPassword());</span>
+<span class="fc" id="L108">        assertNotNull(foundUser.getCreatedAt());</span>
+<span class="fc" id="L109">    }</span>
+
+    @Test
+        void findByUsername_isEmptyWhenUserDoesNotExist() {
+<span class="fc" id="L113">        assertTrue(userRepository.findByUsername(&quot;nobody&quot;).isEmpty());</span>
+<span class="fc" id="L114">        }</span>
+
+    @Test
+    void findAll_returnsAllUsersOrderedById() {
+
+<span class="fc" id="L119">        User firstUser = userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;alice&quot;,
+                        &quot;secret1&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L128">        User secondUser = userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;bob&quot;,
+                        &quot;secret2&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L137">        List&lt;User&gt; users = userRepository.findAll();</span>
+
+<span class="fc" id="L139">        assertEquals(2, users.size());</span>
+
+<span class="fc" id="L141">        assertEquals(</span>
+<span class="fc" id="L142">                firstUser.getId(),</span>
+<span class="fc" id="L143">                users.get(0).getId()</span>
+        );
+
+<span class="fc" id="L146">        assertEquals(</span>
+<span class="fc" id="L147">                secondUser.getId(),</span>
+<span class="fc" id="L148">                users.get(1).getId()</span>
+        );
+
+<span class="fc" id="L151">        assertEquals(&quot;alice&quot;, users.get(0).getUsername());</span>
+<span class="fc" id="L152">        assertEquals(&quot;bob&quot;, users.get(1).getUsername());</span>
+<span class="fc" id="L153">    }</span>
+
+    @Test
+    void findAll_returnsEmptyListWhenNoUsersExist() {
+
+<span class="fc" id="L158">        List&lt;User&gt; users = userRepository.findAll();</span>
+
+<span class="fc" id="L160">        assertNotNull(users);</span>
+<span class="fc" id="L161">        assertTrue(users.isEmpty());</span>
+<span class="fc" id="L162">    }</span>
+
+    @Test
+    void save_createsUserAndReturnsPersistedUser() {
+
+<span class="fc" id="L167">        User user = new User(</span>
+                0,
+                &quot;caleb&quot;,
+                &quot;password123&quot;,
+                null
+        );
+
+<span class="fc" id="L174">        User savedUser = userRepository.save(user);</span>
+
+<span class="pc bpc" id="L176" title="1 of 2 branches missed.">        assertTrue(savedUser.getId() &gt; 0);</span>
+<span class="fc" id="L177">        assertEquals(&quot;caleb&quot;, savedUser.getUsername());</span>
+<span class="fc" id="L178">        assertEquals(&quot;password123&quot;, savedUser.getPassword());</span>
+<span class="fc" id="L179">        assertNotNull(savedUser.getCreatedAt());</span>
+<span class="fc" id="L180">    }</span>
+
+    @Test
+    void save_generatesDifferentIdsForDifferentUsers() {
+
+<span class="fc" id="L185">        User firstUser = userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;alice&quot;,
+                        &quot;secret1&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L194">        User secondUser = userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;bob&quot;,
+                        &quot;secret2&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L203">        assertNotEquals(</span>
+<span class="fc" id="L204">                firstUser.getId(),</span>
+<span class="fc" id="L205">                secondUser.getId()</span>
+        );
+<span class="fc" id="L207">    }</span>
+
+    @Test
+    void save_throwsRepositoryExceptionWhenUsernameAlreadyExists() {
+
+<span class="fc" id="L212">        userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;caleb&quot;,
+                        &quot;password123&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L221">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L223">                () -&gt; userRepository.save(</span>
+                        new User(
+                                0,
+                                &quot;caleb&quot;,
+                                &quot;differentPassword&quot;,
+                                null
+                        )
+                )
+        );
+<span class="fc" id="L232">    }</span>
+
+    @Test
+    void save_throwsRepositoryExceptionWhenUsernameIsNull() {
+
+<span class="fc" id="L237">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L239">                () -&gt; userRepository.save(</span>
+                        new User(
+                                0,
+                                null,
+                                &quot;password123&quot;,
+                                null
+                        )
+                )
+        );
+<span class="fc" id="L248">    }</span>
+
+    @Test
+    void save_throwsRepositoryExceptionWhenUsernameIsBlank() {
+
+<span class="fc" id="L253">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L255">                () -&gt; userRepository.save(</span>
+                        new User(
+                                0,
+                                &quot;   &quot;,
+                                &quot;password123&quot;,
+                                null
+                        )
+                )
+        );
+<span class="fc" id="L264">    }</span>
+
+    @Test
+    void save_throwsRepositoryExceptionWhenUsernameIsEmpty() {
+
+<span class="fc" id="L269">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L271">                () -&gt; userRepository.save(</span>
+                        new User(
+                                0,
+                                &quot;&quot;,
+                                &quot;password123&quot;,
+                                null
+                        )
+                )
+        );
+<span class="fc" id="L280">    }</span>
+
+    @Test
+    void save_allowsBlankPasswordIfSchemaAllowsIt() {
+
+<span class="fc" id="L285">        User savedUser = userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;caleb&quot;,
+                        &quot;&quot;,
+                        null
+                )
+        );
+
+<span class="pc bpc" id="L294" title="1 of 2 branches missed.">        assertTrue(savedUser.getId() &gt; 0);</span>
+<span class="fc" id="L295">        assertEquals(&quot;&quot;, savedUser.getPassword());</span>
+<span class="fc" id="L296">    }</span>
+
+    @Test
+    void save_persistsCreatedAtInExpectedFormat() {
+
+<span class="fc" id="L301">        User savedUser = userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;caleb&quot;,
+                        &quot;password123&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L310">        assertNotNull(savedUser.getCreatedAt());</span>
+
+<span class="fc" id="L312">        assertDoesNotThrow(() -&gt;</span>
+<span class="fc" id="L313">                LocalDateTime.parse(</span>
+<span class="fc" id="L314">                        savedUser.getCreatedAt(),</span>
+<span class="fc" id="L315">                        DateTimeFormatter.ofPattern(</span>
+                                &quot;yyyy-MM-dd HH:mm&quot;
+                        )
+                )
+        );
+<span class="fc" id="L320">    }</span>
+
+    @Test
+    void findById_returnsCorrectMappedUser() {
+
+<span class="fc" id="L325">        User savedUser = userRepository.save(</span>
+                new User(
+                        0,
+                        &quot;caleb&quot;,
+                        &quot;password123&quot;,
+                        null
+                )
+        );
+
+<span class="fc" id="L334">        User foundUser =</span>
+<span class="fc" id="L335">                userRepository.findById(savedUser.getId());</span>
+
+<span class="fc" id="L337">        assertAll(</span>
+<span class="fc" id="L338">                () -&gt; assertEquals(</span>
+<span class="fc" id="L339">                        savedUser.getId(),</span>
+<span class="fc" id="L340">                        foundUser.getId()</span>
+                ),
+<span class="fc" id="L342">                () -&gt; assertEquals(</span>
+<span class="fc" id="L343">                        savedUser.getUsername(),</span>
+<span class="fc" id="L344">                        foundUser.getUsername()</span>
+                ),
+<span class="fc" id="L346">                () -&gt; assertEquals(</span>
+<span class="fc" id="L347">                        savedUser.getPassword(),</span>
+<span class="fc" id="L348">                        foundUser.getPassword()</span>
+                ),
+<span class="fc" id="L350">                () -&gt; assertEquals(</span>
+<span class="fc" id="L351">                        savedUser.getCreatedAt(),</span>
+<span class="fc" id="L352">                        foundUser.getCreatedAt()</span>
+                )
+        );
+<span class="fc" id="L355">    }</span>
+
+    @Test
+    void findById_throwsRepositoryExceptionWhenUsersTableDoesNotExist()
+            throws Exception {
+
+<span class="fc" id="L361">        database.connection().createStatement().execute(</span>
+                &quot;DROP TABLE users&quot;
+        );
+
+<span class="fc" id="L365">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L367">                () -&gt; userRepository.findById(1)</span>
+        );
+<span class="fc" id="L369">    }</span>
+
+    @Test
+    void findAll_throwsRepositoryExceptionWhenUsersTableDoesNotExist()
+            throws Exception {
+
+<span class="fc" id="L375">        database.connection().createStatement().execute(</span>
+                &quot;DROP TABLE users&quot;
+        );
+
+<span class="fc" id="L379">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L381">                () -&gt; userRepository.findAll()</span>
+        );
+<span class="fc" id="L383">    }</span>
+
+    @Test
+    void save_throwsRepositoryExceptionWhenUsersTableDoesNotExist()
+            throws Exception {
+
+<span class="fc" id="L389">        database.connection().createStatement().execute(</span>
+                &quot;DROP TABLE users&quot;
+        );
+
+<span class="fc" id="L393">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L395">                () -&gt; userRepository.save(</span>
+                        new User(
+                                0,
+                                &quot;caleb&quot;,
+                                &quot;password123&quot;,
+                                null
+                        )
+                )
+        );
+<span class="fc" id="L404">    }</span>
+
+    @Test
+    void findByUsername_throwsRepositoryExceptionWhenUsersTableDoesNotExist()
+            throws Exception {
+
+<span class="fc" id="L410">        database.connection().createStatement().execute(</span>
+                &quot;DROP TABLE users&quot;
+        );
+
+<span class="fc" id="L414">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L416">                () -&gt; userRepository.findByUsername(&quot;caleb&quot;)</span>
+        );
+<span class="fc" id="L418">    }</span>
+
+    @Test
+    void repository_throwsRepositoryExceptionWhenDatabaseIsClosed() {
+
+<span class="fc" id="L423">        database.close();</span>
+
+<span class="fc" id="L425">        assertThrows(</span>
+                RepositoryException.class,
+<span class="nc" id="L427">                () -&gt; userRepository.findAll()</span>
+        );
+<span class="fc" id="L429">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

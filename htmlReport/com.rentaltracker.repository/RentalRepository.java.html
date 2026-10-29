@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RentalRepository.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.repository</a> &gt; <span class="el_source">RentalRepository.java</span></div><h1>RentalRepository.java</h1><pre class="source lang-java linenums">package com.rentaltracker.repository;
+
+import java.sql.*;
+import java.util.*;
+import java.time.LocalDateTime;
+
+import com.rentaltracker.domain.RentalDomain;
+import com.rentaltracker.domain.enums.RentalStatus;
+import com.rentaltracker.domain.view.ActiveRentalView;
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.infrastructure.DbTime;
+import com.rentaltracker.repository.exception.MappingException;
+import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.repository.exception.SqlExceptionTranslator;
+
+public class RentalRepository {
+     
+
+    private final Database db;
+
+<span class="fc" id="L21">    public RentalRepository (Database db){ </span>
+<span class="fc" id="L22">        this.db = db ;</span>
+<span class="fc" id="L23">    }</span>
+
+
+    public long insert(RentalDomain rental) {
+
+<span class="fc" id="L28">        String sql = &quot;INSERT INTO rentals (item_id, renter_id, start_time, end_time)&quot; + &quot;VALUES (?,?,?,?)&quot;;</span>
+<span class="fc" id="L29">        try(PreparedStatement ps = db.connection()</span>
+<span class="fc" id="L30">            .prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){</span>
+<span class="fc" id="L31">                ps.setLong(1, rental.itemId());</span>
+<span class="fc" id="L32">                ps.setLong(2, rental.renterId());</span>
+<span class="fc" id="L33">                ps.setString(3, DbTime.format(rental.startTime()));</span>
+<span class="fc" id="L34">                ps.setString(4, DbTime.format(rental.endTime()));</span>
+<span class="fc" id="L35">                ps.executeUpdate();</span>
+            
+<span class="fc" id="L37">            try (ResultSet keys = ps.getGeneratedKeys()){</span>
+<span class="fc" id="L38">                keys.next();</span>
+<span class="fc" id="L39">                return keys.getLong(1);</span>
+            }
+
+<span class="fc" id="L42">        } catch (SQLException e){</span>
+<span class="fc" id="L43">            throw SqlExceptionTranslator.translate(&quot;insert rental&quot;, e);</span>
+        }
+    }
+
+    /** @throws NotFoundException if no rental has this id */
+    public RentalDomain findById(long rentalId) {
+<span class="fc" id="L49">        String sql = &quot;SELECT * FROM rentals WHERE rental_id = ?&quot;;</span>
+<span class="fc" id="L50">        try (PreparedStatement ps = db.connection().prepareStatement(sql)) {</span>
+<span class="fc" id="L51">            ps.setLong(1, rentalId);</span>
+<span class="fc" id="L52">            try (ResultSet rs = ps.executeQuery()){</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">                if (!rs.next()){</span>
+<span class="fc" id="L54">                    throw new NotFoundException(&quot;Rental not found &quot; + rentalId);</span>
+                }
+<span class="fc" id="L56">                return map(rs);</span>
+            }
+<span class="nc" id="L58">        }catch (SQLException e){</span>
+<span class="nc" id="L59">            throw SqlExceptionTranslator.translate(&quot;find rental by id&quot;, e);</span>
+        }
+    }
+
+    /** Active rentals on items owned by this user, soonest due date first. */
+    public List&lt;RentalDomain&gt; findActiveByOwner(long ownerId) {
+<span class="fc" id="L65">        String sql = &quot;SELECT r.* FROM rentals r &quot;</span>
+                   + &quot;JOIN listed_items i ON i.item_id = r.item_id &quot;
+                   + &quot;WHERE i.owner_id = ? AND r.status = 'active' &quot;
+                   + &quot;ORDER BY r.end_time ASC &quot;;
+<span class="fc" id="L69">        try (PreparedStatement ps = db.connection().prepareStatement(sql)){</span>
+<span class="fc" id="L70">            ps.setLong(1, ownerId);</span>
+<span class="fc" id="L71">            try( ResultSet rs = ps.executeQuery()){</span>
+<span class="fc" id="L72">                List&lt;RentalDomain&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">                while (rs.next()) {</span>
+<span class="fc" id="L74">                    result.add(map(rs));</span>
+                }
+<span class="fc" id="L76">                return result;</span>
+            }
+            
+<span class="nc" id="L79">        } catch (SQLException e) {</span>
+<span class="nc" id="L80">            throw SqlExceptionTranslator.translate(&quot;find active rental by owner&quot;, e);</span>
+        }
+    }
+
+    /** The active rental for an item, or empty if the item is not out. */
+    public Optional&lt;RentalDomain&gt; findActiveByItem (long itemId) {
+<span class="fc" id="L86">        String sql = &quot;SELECT * FROM rentals WHERE item_id = ? AND status = 'active'&quot;;</span>
+<span class="fc" id="L87">        try (PreparedStatement ps = db.connection().prepareStatement(sql)){</span>
+<span class="fc" id="L88">            ps.setLong(1, itemId);</span>
+<span class="fc" id="L89">            try(ResultSet rs = ps.executeQuery()){</span>
+<span class="fc bfc" id="L90" title="All 2 branches covered.">                return rs.next() ? Optional.of(map(rs)) : Optional.empty();</span>
+            }
+<span class="nc" id="L92">        }catch (SQLException e) {</span>
+<span class="nc" id="L93">            throw SqlExceptionTranslator.translate(&quot;find active rental by item&quot;, e);</span>
+        }
+    }
+
+    //Used on confirming a return, where item name and renter name are required.
+    public List&lt;ActiveRentalView&gt; findActiveViewsByOwner(long ownerId) {
+<span class="nc" id="L99">        String sql = &quot;SELECT r.rental_id, i.item_name, u.username, &quot;</span>
+                + &quot;       r.start_time, r.end_time, r.status &quot;
+                + &quot;FROM rentals r &quot;
+                + &quot;JOIN listed_items i ON i.item_id = r.item_id &quot;
+                + &quot;JOIN users       u ON u.id = r.renter_id &quot;
+                + &quot;WHERE i.owner_id = ? AND r.status = 'active' &quot;
+                + &quot;ORDER BY r.end_time ASC&quot;;
+<span class="nc" id="L106">        try (PreparedStatement ps = db.connection().prepareStatement(sql)) {</span>
+<span class="nc" id="L107">            ps.setLong(1, ownerId);</span>
+<span class="nc" id="L108">            try (ResultSet rs = ps.executeQuery()) {</span>
+<span class="nc" id="L109">                List&lt;ActiveRentalView&gt; out = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L110" title="All 2 branches missed.">                while (rs.next()) out.add(mapView(rs));</span>
+<span class="nc" id="L111">                return out;</span>
+            }
+<span class="nc" id="L113">        } catch (SQLException e) {</span>
+<span class="nc" id="L114">            throw SqlExceptionTranslator.translate(&quot;find active rental views by owner&quot;, e);</span>
+        }
+    }
+
+
+
+    /**
+     * Closes an active rental. Status and returned_at are set in one UPDATE,
+     * because the schema CHECK requires them to change together.
+     * @throws NotFoundException if there is no active rental with this id
+     */
+    public void close (long rentalId, LocalDateTime returnedAt){
+<span class="fc" id="L126">        String sql = &quot;UPDATE rentals SET status = 'closed', returned_at = ? &quot;</span>
+                   + &quot;WHERE rental_id = ? AND status = 'active'&quot;;
+<span class="fc" id="L128">        try (PreparedStatement ps = db.connection().prepareStatement(sql)){</span>
+<span class="fc" id="L129">            ps.setString(1, DbTime.format(returnedAt));</span>
+<span class="fc" id="L130">            ps.setLong(2, rentalId);</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">            if (ps.executeUpdate() == 0) {</span>
+<span class="fc" id="L132">                throw new NotFoundException(&quot;No active rental with id &quot; + rentalId);</span>
+            }
+<span class="nc" id="L134">        } catch (SQLException e) {</span>
+<span class="nc" id="L135">            throw SqlExceptionTranslator.translate(&quot;close rental&quot;, e);</span>
+<span class="fc" id="L136">        }</span>
+<span class="fc" id="L137">    }</span>
+
+    private RentalDomain map(ResultSet rs){
+        try{
+<span class="fc" id="L141">            String returned = rs.getString(&quot;returned_at&quot;);</span>
+<span class="fc" id="L142">            return new RentalDomain(</span>
+<span class="fc" id="L143">                rs.getLong(&quot;rental_id&quot;),</span>
+<span class="fc" id="L144">                rs.getLong(&quot;item_id&quot;),</span>
+<span class="fc" id="L145">                rs.getLong(&quot;renter_id&quot;),</span>
+<span class="fc" id="L146">                DbTime.parse(rs.getString(&quot;start_time&quot;)),</span>
+<span class="fc" id="L147">                DbTime.parse(rs.getString(&quot;end_time&quot;)),</span>
+<span class="fc bfc" id="L148" title="All 2 branches covered.">                returned == null ? null : DbTime.parse(returned),</span>
+<span class="fc" id="L149">                RentalStatus.fromDb(rs.getString(&quot;status&quot;)));</span>
+            
+<span class="fc" id="L151">        }catch (SQLException | RuntimeException e) {</span>
+<span class="fc" id="L152">            throw new MappingException(&quot;Cannot map rental row&quot;, e);</span>
+        }
+    }
+
+    //MAP RESULTS WITH ITEM NAME AND RENTER NAME
+    private ActiveRentalView mapView(ResultSet rs) {
+        try {
+<span class="nc" id="L159">            return new ActiveRentalView(</span>
+<span class="nc" id="L160">                    rs.getLong(&quot;rental_id&quot;),</span>
+<span class="nc" id="L161">                    rs.getString(&quot;item_name&quot;),</span>
+<span class="nc" id="L162">                    rs.getString(&quot;username&quot;),</span>
+<span class="nc" id="L163">                    DbTime.parse(rs.getString(&quot;start_time&quot;)),</span>
+<span class="nc" id="L164">                    DbTime.parse(rs.getString(&quot;end_time&quot;)),</span>
+<span class="nc" id="L165">                    RentalStatus.fromDb(rs.getString(&quot;status&quot;)));</span>
+<span class="nc" id="L166">        } catch (SQLException | RuntimeException e) {</span>
+<span class="nc" id="L167">            throw new MappingException(&quot;Cannot map active rental view&quot;, e);</span>
+        }
+    }
+
+    
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

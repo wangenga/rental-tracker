@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.service</a> &gt; <span class="el_source">UserService.java</span></div><h1>UserService.java</h1><pre class="source lang-java linenums">package com.rentaltracker.service;
+
+import com.rentaltracker.domain.User;
+import com.rentaltracker.repository.UserRepository;
+import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.service.exception.BusinessRuleException;
+
+import java.util.List;
+import java.util.Optional;
+
+public class UserService {
+
+    private static final int MIN_USERNAME_LENGTH = 3;
+    private static final int MAX_USERNAME_LENGTH = 50;
+
+    private final UserRepository userRepository;
+
+<span class="fc" id="L18">    public UserService(UserRepository userRepository) {</span>
+<span class="fc" id="L19">        this.userRepository = userRepository;</span>
+<span class="fc" id="L20">    }</span>
+
+    // ---------- the owner (first launch) ----------
+
+    /** Empty means first launch: nobody has an account yet. */
+    public Optional&lt;User&gt; findOwner() {
+<span class="fc" id="L26">        return userRepository.findFirst();</span>
+    }
+
+    /** Creates the owner account. Only allowed while no users exist. */
+    public User createOwner(String username) {
+<span class="fc bfc" id="L31" title="All 2 branches covered.">        if (userRepository.findFirst().isPresent()) {</span>
+<span class="fc" id="L32">            throw new BusinessRuleException(&quot;An owner account already exists&quot;);</span>
+        }
+<span class="fc" id="L34">        String normalized = normalizeUsername(username);</span>
+<span class="fc" id="L35">        validateUsername(normalized);</span>
+<span class="fc" id="L36">        return userRepository.save(new User(0, normalized, null, null));</span>
+    }
+
+    // ---------- other users (renters) ----------
+
+    /** Creates a user with no password. Rejects a username that is already taken. */
+    public User createUser(String username) {
+<span class="fc" id="L43">        String normalized = normalizeUsername(username);</span>
+<span class="fc" id="L44">        validateUsername(normalized);</span>
+
+<span class="fc bfc" id="L46" title="All 2 branches covered.">        if (userRepository.findByUsername(normalized).isPresent()) {</span>
+<span class="fc" id="L47">            throw new IllegalArgumentException(&quot;Username already exists: &quot; + normalized);</span>
+        }
+<span class="fc" id="L49">        return userRepository.save(new User(0, normalized, null, null));</span>
+    }
+
+    /** Finds the user, or creates one with no password. Used when recording a rental. */
+    public User findOrCreate(String username) {
+<span class="fc" id="L54">        String normalized = normalizeUsername(username);</span>
+<span class="fc" id="L55">        validateUsername(normalized);</span>
+
+<span class="fc" id="L57">        return userRepository.findByUsername(normalized)</span>
+<span class="fc" id="L58">                .orElseGet(() -&gt; userRepository.save(new User(0, normalized, null, null)));</span>
+    }
+
+    // ---------- reads ----------
+
+    public User getUser(long id) {
+<span class="fc bfc" id="L64" title="All 2 branches covered.">        if (id &lt;= 0) {</span>
+<span class="fc" id="L65">            throw new IllegalArgumentException(&quot;User ID must be greater than zero&quot;);</span>
+        }
+<span class="fc" id="L67">        return userRepository.findById(id);</span>
+    }
+
+    public User getUserByUsername(String username) {
+<span class="fc" id="L71">        String normalized = normalizeUsername(username);</span>
+<span class="fc" id="L72">        validateUsername(normalized);</span>
+
+<span class="fc" id="L74">        return userRepository.findByUsername(normalized)</span>
+<span class="fc" id="L75">                .orElseThrow(() -&gt; new NotFoundException(&quot;User not found: &quot; + normalized));</span>
+    }
+
+    public List&lt;User&gt; getAllUsers() {
+<span class="fc" id="L79">        return userRepository.findAll();</span>
+    }
+
+    // ---------- helpers ----------
+
+    private String normalizeUsername(String username) {
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        if (username == null) {</span>
+<span class="fc" id="L86">            throw new IllegalArgumentException(&quot;Username cannot be null&quot;);</span>
+        }
+<span class="fc" id="L88">        return username.trim().toLowerCase();</span>
+    }
+
+    private void validateUsername(String username) {
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        if (username.isEmpty()) {</span>
+<span class="fc" id="L93">            throw new IllegalArgumentException(&quot;Username cannot be empty&quot;);</span>
+        }
+<span class="fc bfc" id="L95" title="All 2 branches covered.">        if (username.length() &lt; MIN_USERNAME_LENGTH) {</span>
+<span class="fc" id="L96">            throw new IllegalArgumentException(</span>
+                    &quot;Username must be at least &quot; + MIN_USERNAME_LENGTH + &quot; characters&quot;);
+        }
+<span class="fc bfc" id="L99" title="All 2 branches covered.">        if (username.length() &gt; MAX_USERNAME_LENGTH) {</span>
+<span class="fc" id="L100">            throw new IllegalArgumentException(</span>
+                    &quot;Username must not exceed &quot; + MAX_USERNAME_LENGTH + &quot; characters&quot;);
+        }
+<span class="fc bfc" id="L103" title="All 2 branches covered.">        if (!username.matches(&quot;[a-z0-9_]+&quot;)) {</span>
+<span class="fc" id="L104">            throw new IllegalArgumentException(</span>
+                    &quot;Username may only contain lowercase letters, numbers, and underscores&quot;);
+        }
+<span class="fc" id="L107">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

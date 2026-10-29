@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Main.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker</a> &gt; <span class="el_source">Main.java</span></div><h1>Main.java</h1><pre class="source lang-java linenums">package com.rentaltracker;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Clock;
+
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.ItemRepository;
+import com.rentaltracker.repository.RentalRepository;
+import com.rentaltracker.repository.SqliteTransactor;
+import com.rentaltracker.repository.Transactor;
+import com.rentaltracker.repository.UserRepository;
+import com.rentaltracker.repository.exception.RepositoryException;
+import com.rentaltracker.service.ItemService;
+import com.rentaltracker.service.RentalService;
+import com.rentaltracker.service.UserService;
+import com.rentaltracker.transport.MainMenu;
+import com.rentaltracker.transport.Prompter;
+import com.rentaltracker.transport.screens.ConfirmReturnScreen;
+import com.rentaltracker.transport.screens.InventoryScreen;
+import com.rentaltracker.transport.screens.ListItemScreen;
+import com.rentaltracker.transport.screens.RecordRentalScreen;
+import com.rentaltracker.transport.screens.StartupScreen;
+
+<span class="nc" id="L28">public class Main {</span>
+
+    public static void main(String[] args) {
+<span class="nc bnc" id="L31" title="All 2 branches missed.">        String path = args.length &gt; 0 ? args[0] : &quot;data/local.db&quot;;</span>
+<span class="nc" id="L32">        run(path, System.in, System.out, Clock.systemDefaultZone());</span>
+<span class="nc" id="L33">    }</span>
+
+    public static void run(String path, InputStream in, PrintStream out, Clock clock) {
+        try {
+<span class="nc" id="L37">            createParentDirectory(path);</span>
+<span class="nc" id="L38">            try (Database db = new Database(path)) {</span>
+<span class="nc" id="L39">                buildMenu(db, new Prompter(in, out), clock).run();</span>
+            }
+<span class="nc" id="L41">        } catch (IOException | RepositoryException e) {</span>
+<span class="nc" id="L42">            out.println(&quot;Cannot run the app: &quot; + e.getMessage());</span>
+<span class="nc" id="L43">        }</span>
+<span class="nc" id="L44">    }</span>
+
+    private static MainMenu buildMenu(Database db, Prompter prompter, Clock clock) {
+<span class="nc" id="L47">        UserRepository userRepository = new UserRepository(db);</span>
+<span class="nc" id="L48">        ItemRepository itemRepository = new ItemRepository(db.connection());</span>
+<span class="nc" id="L49">        RentalRepository rentalRepository = new RentalRepository(db);</span>
+<span class="nc" id="L50">        Transactor tx = new SqliteTransactor(db);</span>
+
+<span class="nc" id="L52">        UserService users = new UserService(userRepository);</span>
+<span class="nc" id="L53">        ItemService items = new ItemService(itemRepository, rentalRepository, users, tx);</span>
+<span class="nc" id="L54">        RentalService rentals = new RentalService(itemRepository, rentalRepository, users, tx, clock);</span>
+
+<span class="nc" id="L56">        return new MainMenu(prompter,</span>
+                new StartupScreen(prompter, users),
+                new ListItemScreen(prompter, items),
+                new InventoryScreen(prompter, items),
+                new RecordRentalScreen(prompter, rentals),
+                new ConfirmReturnScreen(prompter, rentals));
+    }
+
+    private static void createParentDirectory(String path) throws IOException {
+<span class="nc" id="L65">        Path parent = Path.of(path).toAbsolutePath().getParent();</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">        if (parent != null) {</span>
+<span class="nc" id="L67">            Files.createDirectories(parent);</span>
+        }
+<span class="nc" id="L69">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

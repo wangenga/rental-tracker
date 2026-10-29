@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DataInitializer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.infrastructure</a> &gt; <span class="el_source">DataInitializer.java</span></div><h1>DataInitializer.java</h1><pre class="source lang-java linenums">package com.rentaltracker.infrastructure;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Scanner;
+
+import com.rentaltracker.repository.exception.DatabaseConnectionException;
+
+public final class DataInitializer {
+
+    private DataInitializer() {}
+
+    public static void initialize(Connection conn) {
+        try (
+            // 1. Get the SQL file from resources
+<span class="fc" id="L20">            InputStream inputStream = DataInitializer.class</span>
+<span class="fc" id="L21">                    .getClassLoader()</span>
+<span class="fc" id="L22">                    .getResourceAsStream(&quot;schema.sql&quot;)</span>
+        ) {
+<span class="pc bpc" id="L24" title="1 of 2 branches missed.">            if (inputStream == null) {</span>
+<span class="nc" id="L25">                throw new IllegalStateException(&quot;Could not find schema.sql in resources folder!&quot;);</span>
+            }
+
+            // 2. Read the file content into a String
+            String sqlScript;
+<span class="fc" id="L30">            try (Scanner scanner = new Scanner(inputStream, StandardCharsets.UTF_8).useDelimiter(&quot;\\A&quot;)) {</span>
+<span class="pc bpc" id="L31" title="1 of 2 branches missed.">                sqlScript = scanner.hasNext() ? scanner.next() : &quot;&quot;;</span>
+            }
+
+            // 3. Split the script by semicolon (;)
+            // Note: This is a simple split. It works for basic DDL.
+<span class="fc" id="L36">            String[] statements = sqlScript.split(&quot;;&quot;);</span>
+
+            // 4. Execute each statement
+<span class="fc" id="L39">            try (Statement stmt = conn.createStatement()) {</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">                for (String sql : statements) {</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">                    if (!sql.isBlank()) {</span>
+<span class="fc" id="L42">                        stmt.execute(sql.trim());// Use execute() for DDL</span>
+<span class="fc" id="L43">                        System.out.println(&quot;schema.sql ran&quot;);</span>
+                    }
+                }
+            }
+<span class="nc" id="L47">        } catch (IOException | SQLException e) {</span>
+<span class="nc" id="L48">            throw new DatabaseConnectionException(&quot;Failed to initialize database&quot;, e);</span>
+<span class="fc" id="L49">        }</span>
+<span class="fc" id="L50">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

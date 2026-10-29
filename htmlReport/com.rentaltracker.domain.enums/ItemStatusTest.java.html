@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ItemStatusTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.domain.enums</a> &gt; <span class="el_source">ItemStatusTest.java</span></div><h1>ItemStatusTest.java</h1><pre class="source lang-java linenums">package com.rentaltracker.domain.enums;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.Set;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import static com.rentaltracker.domain.enums.ItemStatus.*;
+
+<span class="fc" id="L14">class ItemStatusTest {</span>
+
+<span class="fc" id="L16">    private static final Set&lt;String&gt; ALLOWED = Set.of(</span>
+            &quot;available&gt;rented&quot;, &quot;available&gt;unlisted&quot;,
+            &quot;rented&gt;available&quot;, &quot;rented&gt;unlisted&quot;,
+            &quot;unlisted&gt;available&quot;);
+
+    @Test
+    void everyMoveIsAllowedOrRejectedExactlyAsListed() {
+<span class="fc bfc" id="L23" title="All 2 branches covered.">        for (ItemStatus from : values()) {</span>
+<span class="fc bfc" id="L24" title="All 2 branches covered.">            for (ItemStatus to : values()) {</span>
+<span class="fc" id="L25">                boolean expected = ALLOWED.contains(from + &quot;&gt;&quot; + to);</span>
+<span class="fc" id="L26">                assertEquals(expected, from.canTransitionTo(to), from + &quot; -&gt; &quot; + to);</span>
+            }
+        }
+<span class="fc" id="L29">    }</span>
+
+    @Test
+    void transitionToReturnsTheNewStatusWhenAllowed() {
+<span class="fc" id="L33">        assertEquals(rented, available.transitionTo(rented));</span>
+<span class="fc" id="L34">    }</span>
+
+    @Test
+    void transitionToThrowsWhenNotAllowed() {
+<span class="pc" id="L38">        assertThrows(IllegalStateException.class, () -&gt; unlisted.transitionTo(rented));</span>
+<span class="pc" id="L39">        assertThrows(IllegalStateException.class, () -&gt; available.transitionTo(available));</span>
+<span class="fc" id="L40">    }</span>
+
+    @Test
+    void fromDbReadsTheStoredLowercaseText() {
+<span class="fc" id="L44">        assertEquals(available, fromDb(&quot;available&quot;));</span>
+<span class="fc" id="L45">        assertEquals(rented, fromDb(&quot;rented&quot;));</span>
+<span class="fc" id="L46">        assertEquals(unlisted, fromDb(&quot;unlisted&quot;));</span>
+<span class="fc" id="L47">    }</span>
+
+    @ParameterizedTest
+    @ValueSource(strings = {&quot;broken&quot;, &quot;&quot;, &quot;  &quot;})
+    void fromDbRejectsUnknownText(String text) {
+<span class="pc" id="L52">        assertThrows(IllegalArgumentException.class, () -&gt; fromDb(text));</span>
+<span class="fc" id="L53">    }</span>
+
+    @ParameterizedTest
+    @NullSource
+    void fromDbRejectsNull(String text) {
+<span class="pc" id="L58">        assertThrows(IllegalArgumentException.class, () -&gt; fromDb(text));</span>
+<span class="fc" id="L59">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>

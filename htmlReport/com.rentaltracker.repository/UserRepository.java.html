@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserRepository.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jacoco.exec</a> &gt; <a href="index.source.html" class="el_package">com.rentaltracker.repository</a> &gt; <span class="el_source">UserRepository.java</span></div><h1>UserRepository.java</h1><pre class="source lang-java linenums">package com.rentaltracker.repository;
+
+import com.rentaltracker.domain.User;
+import com.rentaltracker.infrastructure.Database;
+import com.rentaltracker.repository.exception.MappingException;
+import com.rentaltracker.repository.exception.NotFoundException;
+import com.rentaltracker.repository.exception.RepositoryException;
+import com.rentaltracker.repository.exception.SqlExceptionTranslator;
+
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Handles persistence operations for users.
+ *
+ * The repository only talks to the database. Business rules and validation
+ * belong in the service layer.
+ */
+public class UserRepository {
+
+    private static final String COLUMNS = &quot;id, username, password, created_at&quot;;
+
+    private final Database database;
+
+<span class="fc" id="L29">    public UserRepository(Database database) {</span>
+<span class="fc" id="L30">        this.database = database;</span>
+<span class="fc" id="L31">    }</span>
+
+    /**
+     * @throws NotFoundException   if no user has this id
+     * @throws RepositoryException if the database operation fails
+     */
+    public User findById(long id) {
+<span class="fc" id="L38">        String sql = &quot;SELECT &quot; + COLUMNS + &quot; FROM users WHERE id = ?&quot;;</span>
+
+<span class="fc" id="L40">        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {</span>
+<span class="fc" id="L41">            statement.setLong(1, id);</span>
+
+<span class="fc" id="L43">            try (ResultSet resultSet = statement.executeQuery()) {</span>
+<span class="fc bfc" id="L44" title="All 2 branches covered.">                if (!resultSet.next()) {</span>
+<span class="fc" id="L45">                    throw new NotFoundException(&quot;User with id &quot; + id + &quot; was not found&quot;);</span>
+                }
+<span class="fc" id="L47">                return mapRow(resultSet);</span>
+            }
+<span class="fc" id="L49">        } catch (SQLException e) {</span>
+<span class="fc" id="L50">            throw SqlExceptionTranslator.translate(&quot;find user by id&quot;, e);</span>
+        }
+    }
+
+    /**
+     * @return the matching user, or empty if nobody has this username
+     * @throws RepositoryException if the database operation fails
+     */
+    public Optional&lt;User&gt; findByUsername(String username) {
+<span class="fc" id="L59">        String sql = &quot;SELECT &quot; + COLUMNS + &quot; FROM users WHERE username = ?&quot;;</span>
+
+<span class="fc" id="L61">        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {</span>
+<span class="fc" id="L62">            statement.setString(1, username);</span>
+
+<span class="fc" id="L64">            try (ResultSet resultSet = statement.executeQuery()) {</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">                return resultSet.next() ? Optional.of(mapRow(resultSet)) : Optional.empty();</span>
+            }
+<span class="fc" id="L67">        } catch (SQLException e) {</span>
+<span class="fc" id="L68">            throw SqlExceptionTranslator.translate(&quot;find user by username&quot;, e);</span>
+        }
+    }
+
+    /**
+     * The lowest-id user. By convention this is the owner.
+     *
+     * @return the first user, or empty if there are no users yet
+     */
+    public Optional&lt;User&gt; findFirst() {
+<span class="fc" id="L78">        String sql = &quot;SELECT &quot; + COLUMNS + &quot; FROM users ORDER BY id LIMIT 1&quot;;</span>
+
+<span class="fc" id="L80">        try (PreparedStatement statement = database.connection().prepareStatement(sql);</span>
+<span class="fc" id="L81">             ResultSet resultSet = statement.executeQuery()) {</span>
+<span class="fc bfc" id="L82" title="All 2 branches covered.">            return resultSet.next() ? Optional.of(mapRow(resultSet)) : Optional.empty();</span>
+<span class="nc" id="L83">        } catch (SQLException e) {</span>
+<span class="nc" id="L84">            throw SqlExceptionTranslator.translate(&quot;find first user&quot;, e);</span>
+        }
+    }
+
+    /** All users ordered by id. */
+    public List&lt;User&gt; findAll() {
+<span class="fc" id="L90">        String sql = &quot;SELECT &quot; + COLUMNS + &quot; FROM users ORDER BY id&quot;;</span>
+<span class="fc" id="L91">        List&lt;User&gt; users = new ArrayList&lt;&gt;();</span>
+
+<span class="fc" id="L93">        try (PreparedStatement statement = database.connection().prepareStatement(sql);</span>
+<span class="fc" id="L94">             ResultSet resultSet = statement.executeQuery()) {</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">            while (resultSet.next()) {</span>
+<span class="fc" id="L96">                users.add(mapRow(resultSet));</span>
+            }
+<span class="fc" id="L98">            return users;</span>
+<span class="fc" id="L99">        } catch (SQLException e) {</span>
+<span class="fc" id="L100">            throw SqlExceptionTranslator.translate(&quot;find all users&quot;, e);</span>
+        }
+    }
+
+    /**
+     * Creates a user and returns the stored row.
+     * RETURNING lets SQLite hand back the new row without a second query.
+     *
+     * @throws RepositoryException if the database operation fails
+     *         (a duplicate username surfaces as a UNIQUE constraint violation)
+     */
+    public User save(User user) {
+<span class="fc" id="L112">        String sql = &quot;INSERT INTO users (username, password) VALUES (?, ?) &quot;</span>
+                   + &quot;RETURNING &quot; + COLUMNS;
+
+<span class="fc" id="L115">        try (PreparedStatement statement = database.connection().prepareStatement(sql)) {</span>
+<span class="fc" id="L116">            statement.setString(1, user.getUsername());</span>
+<span class="fc" id="L117">            statement.setString(2, user.getPassword());</span>
+
+<span class="fc" id="L119">            try (ResultSet resultSet = statement.executeQuery()) {</span>
+<span class="pc bpc" id="L120" title="1 of 2 branches missed.">                if (!resultSet.next()) {</span>
+<span class="nc" id="L121">                    throw new RepositoryException(&quot;Failed to retrieve the created user&quot;);</span>
+                }
+<span class="fc" id="L123">                return mapRow(resultSet);</span>
+            }
+<span class="fc" id="L125">        } catch (SQLException e) {</span>
+<span class="fc" id="L126">            throw SqlExceptionTranslator.translate(&quot;save user&quot;, e);</span>
+        }
+    }
+
+
+    /** Maps the current row to a User. A row that cannot be read is a MappingException. */
+    private User mapRow(ResultSet resultSet) {
+        try {
+<span class="fc" id="L134">            return new User(</span>
+<span class="fc" id="L135">                    resultSet.getLong(&quot;id&quot;),</span>
+<span class="fc" id="L136">                    resultSet.getString(&quot;username&quot;),</span>
+<span class="fc" id="L137">                    resultSet.getString(&quot;password&quot;),</span>
+<span class="fc" id="L138">                    resultSet.getString(&quot;created_at&quot;));</span>
+<span class="nc" id="L139">        } catch (SQLException e) {</span>
+<span class="nc" id="L140">            throw new MappingException(&quot;Cannot map user row&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.15.202606040825</span></div></body></html>
