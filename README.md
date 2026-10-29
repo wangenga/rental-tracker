@@ -27,6 +27,16 @@ Everything after `-Dexec.args=` is passed to `main`. The first argument is the d
 
 The database file and its tables are created on first run. Make sure the `data/` folder exists (`mkdir -p data`).
 
+### On first run, enter the username as liisa
+
+## Load sample data
+Run the following command:
+
+``` bash 
+sqlite3 data/<your_file_name>.db ".read sample-data.sql"
+```
+
+
 ## Tests and coverage
 
 - `mvn clean test` - run the tests and write the coverage report to `docs/coverage/`
@@ -39,7 +49,6 @@ transport -> service -> repository -> infrastructure, with domain shared by all.
 
 ### Transport Layer Layout
 
-```
 
 transport/
 ├── Prompter            all console input/output goes through this
